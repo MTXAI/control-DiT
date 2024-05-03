@@ -1,0 +1,16 @@
+name: DiT
+channels:
+  - pytorch
+  - nvidia
+dependencies:
+  - python == 3.9.19
+  - pytorch == 1.13.1
+  - torchvision
+  - pytorch-cuda=11.7
+  - pip:
+    - timm
+    - diffusers
+    - accelerate
+    - pycocotools
+    - opencv-python
+    - jupyter

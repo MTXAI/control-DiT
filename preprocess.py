@@ -75,8 +75,8 @@ def generate_deep_graph_parallel(dataset: CustomCocoDataset, args):
 
 
 def main(args):
-    annotation_path = str(os.path.join(args.dataset, args.annotation))
-    coco_dataset = CustomCocoDataset(root=args.dataset, annotation_file=annotation_path, make_index=True, transform=Transform)
+    coco_dataset = CustomCocoDataset(root=args.dataset, annotation_file=args.annotation,
+                                     make_index=True, transform=Transform)
     print('Number of samples: ', len(coco_dataset))
     generate_deep_graph_parallel(coco_dataset, args)
 
@@ -86,7 +86,7 @@ if __name__ == "__main__":
     parser.add_argument("--dataset", type=str,
                         default="./datasets/example/trainval")
     parser.add_argument("--annotation", type=str,
-                        default="captions_example_trainval2017.json")
+                        default="./datasets/example/trainval/captions_example_trainval2017.json")
     parser.add_argument("--batch", type=int, default=32,
                         help="size of preprocessing image batch, estimated based on image size and memory capacity")
     parser.add_argument("--parallel", type=int, default=0,

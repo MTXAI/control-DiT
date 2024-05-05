@@ -92,7 +92,7 @@ class ImageTools(object):
 
     @classmethod
     def cv2_to_pil_tensor(cls, img):
-        # put it from HWC to CHW format
+        # HWC to CHW
         img = img.transpose((2, 0, 1))
         return torch.from_numpy(img)
 
@@ -102,6 +102,7 @@ class ImageTools(object):
 
     @classmethod
     def pil_tensor_to_cv2(cls, tensor):
+        # CHW to HWC
         img = tensor.permute((1, 2, 0)).numpy()
         return img
 

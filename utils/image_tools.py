@@ -1,13 +1,9 @@
-import shutil
-import re
-import os
-
-from matplotlib import pyplot as plt
-from torchvision.utils import make_grid
-from PIL import Image
-import torch
-import numpy as np
 import cv2 as cv
+import numpy as np
+import torch
+from PIL import Image
+from matplotlib import pyplot as plt
+from torchvision import transforms
 
 
 class ImageTools(object):
@@ -95,24 +91,27 @@ class ImageTools(object):
         return cv.applyColorMap(cv.convertScaleAbs(deep_img, alpha=7), cv.COLORMAP_JET)
 
     @classmethod
-    def cv2_to_tensor(cls, img):
-        pass
+    def cv2_to_pil_tensor(cls, img):
+        # put it from HWC to CHW format
+        img = img.transpose((2, 0, 1))
+        return torch.from_numpy(img)
 
     @classmethod
     def cv2_to_pil(cls, img):
         return Image.fromarray(cv.cvtColor(img, cv.COLOR_BGR2RGB))
 
     @classmethod
-    def tensor_to_cv2(cls, tensor):
-        pass
+    def pil_tensor_to_cv2(cls, tensor):
+        img = tensor.permute((1, 2, 0)).numpy()
+        return img
 
     @classmethod
-    def tensor_to_pil(cls, img):
-        pass
+    def pil_tensor_to_pil(cls, tensor):
+        return transforms.ToPILImage()(tensor).convert('RGB')
 
     @classmethod
-    def pil_to_tensor(cls, img):
-        pass
+    def pil_to_pil_tensor(cls, img):
+        return transforms.ToTensor()(img)
 
     @classmethod
     def pil_to_cv2(cls, img):

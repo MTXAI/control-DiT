@@ -18,12 +18,11 @@ imgTools = ImageTools()
 
 
 def main():
-    os.remove("./output")
-    os.mkdir("./output")
+    # os.mkdir("./output")
     # train: 118287
     # val: 5000
-    dataset = "./datasets/COCO_Captions/train2017"
-    annotation = "./datasets/COCO_Captions/annotations_trainval2017/annotations/instances_train2017.json"
+    dataset = "/gemini/data-1/train2017"
+    annotation = "/gemini/data-1/annotations/instances_train2017.json"
     coco_dataset = CustomCocoDataset(root=dataset, annotation_file=annotation, make_index=True,
                                      transform=Transform)
     print('Number of samples: ', len(coco_dataset))
@@ -38,13 +37,19 @@ def main():
     cv_img = imgTools.pil_to_cv2(pil_img)
     imgTools.write(cv_img, "./output/cv.jpg")
 
+    if not cv.cuda.getCudaEnabledDeviceCount():
+        print("CUDA is not available. Please make sure CUDA drivers are installed.")
+        return
+    gpu_image = cv.cuda_GpuMat()
+    gpu_image.upload(img)
+
     i = 1
     for a in anno:
         print(a["category_id"])
         print(a["bbox"])
         print(a["area"])
         x, y, w, h = int(a["bbox"][0]), int(a["bbox"][1]), int(a["bbox"][2]), int(a["bbox"][3])
-        bbox_img = cv_img[y:y+h, x:x+w]
+        bbox_img = gpu_image[y:y+h, x:x+w]
         cate = a["category_id"]
         imgTools.write(bbox_img, f"./output/{cate}-{i}.jpg")
         i += 1

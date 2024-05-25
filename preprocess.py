@@ -8,6 +8,7 @@ import numpy as np
 import torch
 import torchvision.transforms as transforms
 import torch.distributed as dist
+from PIL import Image
 from accelerate import Accelerator
 from torch.utils.data import DataLoader
 from torchvision.datasets import ImageFolder, ImageNet
@@ -17,6 +18,27 @@ from utils.image_tools import ImageTools
 CUDA = True if torch.cuda.is_available() else False
 Tensor = torch.cuda.FloatTensor if CUDA else torch.FloatTensor
 imgTools = ImageTools()
+
+
+def center_crop_arr(pil_image, image_size):
+    """
+    Center cropping implementation from ADM.
+    https://github.com/openai/guided-diffusion/blob/8fb3ad9197f16bbc40620447b2742e13458d2831/guided_diffusion/image_datasets.py#L126
+    """
+    while min(*pil_image.size) >= 2 * image_size:
+        pil_image = pil_image.resize(
+            tuple(x // 2 for x in pil_image.size), resample=Image.BOX
+        )
+
+    scale = image_size / min(*pil_image.size)
+    pil_image = pil_image.resize(
+        tuple(round(x * scale) for x in pil_image.size), resample=Image.BICUBIC
+    )
+
+    arr = np.array(pil_image)
+    crop_y = (arr.shape[0] - image_size) // 2
+    crop_x = (arr.shape[1] - image_size) // 2
+    return Image.fromarray(arr[crop_y: crop_y + image_size, crop_x: crop_x + image_size])
 
 
 def create_class_index(class_index_path):
@@ -31,13 +53,11 @@ def create_class_index(class_index_path):
 def main(args):
     # assert CUDA, "Training currently requires at least one GPU."
 
-    # # Setup accelerator:
-    # accelerator = Accelerator(not CUDA)
-    # device = accelerator.device
-    device = "cuda" if CUDA else "cpu"
+    # Setup accelerator:
+    accelerator = Accelerator(not CUDA)
+    device = accelerator.device
 
     print(f'[CUDA] == {CUDA}\n[Derive] == {device}')
-
 
     root = os.path.join(args.root, args.split)
     new_root = args.root + '_processed_' + args.split
@@ -45,20 +65,22 @@ def main(args):
     labels_dir = os.path.join(new_root, f'imagenet{args.image_size}_labels')
     conditions_dir = os.path.join(new_root, f'imagenet{args.image_size}_conditions')
 
-    os.makedirs(new_root, exist_ok=True)
-    os.makedirs(features_dir, exist_ok=True)
-    os.makedirs(labels_dir, exist_ok=True)
-    os.makedirs(conditions_dir, exist_ok=True)
+    if accelerator.is_main_process:
+        os.makedirs(new_root, exist_ok=True)
+        os.makedirs(features_dir, exist_ok=True)
+        os.makedirs(labels_dir, exist_ok=True)
+        os.makedirs(conditions_dir, exist_ok=True)
 
     assert args.image_size % 8 == 0, "Image size must be divisible by 8 (for the VAE encoder)."
 
     # Setup data:
-    # todo 添加对原始 image size 范围的筛选，如 256 筛选范围为 160 -- 320， 512 筛选范围为 360 -- 640
-    dataset = ImageFolder(str(root), transform=transforms.Compose([
+    transform = transforms.Compose([
+        transforms.Lambda(lambda pil_image: center_crop_arr(pil_image, args.image_size)),
         transforms.RandomHorizontalFlip(),
         transforms.ToTensor(),
-        transforms.Resize([args.image_size, args.image_size]),
-    ]))
+        transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5], inplace=True)
+    ])
+    dataset = ImageFolder(str(root), transform=transform)
 
     loader = DataLoader(
         dataset,
@@ -72,14 +94,17 @@ def main(args):
     # create index
     index = create_class_index(args.class_index)
 
-    idx = 0
+    idx = -1
     for x, y in loader:
-        features_path = os.path.join(features_dir, f'{idx}.npy')
-        labels_path = os.path.join(labels_dir, f'{idx}.npy')
-        conditions_path = os.path.join(conditions_dir, f'{idx}.npy')
+        idx += 1
 
         index_key = dataset.classes[y[0]]
-        print(f'==={idx}/{len(dataset)}, class: {index_key}-{index[index_key]}')
+        print(f'==={idx}/{len(dataset)}, class: {y[0]}-{index_key}-{index[index_key]}')
+
+        filename = f'{index[index_key][0]}_{index_key}_{index[index_key][1]}_{idx}.npy'
+        features_path = os.path.join(features_dir, filename)
+        labels_path = os.path.join(labels_dir, filename)
+        conditions_path = os.path.join(conditions_dir, filename)
 
         if not os.path.exists(features_path) or not os.path.exists(conditions_path):
             x = x.to(device)
@@ -102,8 +127,6 @@ def main(args):
             print(f'c filepath: {conditions_path}, shape: {c.shape}')
         else:
             print(f'c filepath: {conditions_path}, has existed')
-
-        idx += 1
 
         if len(index[index_key]) == 0:
             print(index_key)

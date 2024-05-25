@@ -60,8 +60,8 @@ def main(args):
 
     print(f'[CUDA] == {CUDA}\n[Derive] == {device}')
 
-    root = os.path.join(args.root, args.split)
-    new_root = args.root + '_processed_' + args.split
+    root = args.input
+    new_root = args.output
     features_dir = os.path.join(new_root, f'imagenet{args.image_size}_features')
     labels_dir = os.path.join(new_root, f'imagenet{args.image_size}_labels')
     conditions_dir = os.path.join(new_root, f'imagenet{args.image_size}_conditions')
@@ -110,7 +110,7 @@ def main(args):
 
         if not os.path.exists(features_path) or not os.path.exists(conditions_path):
             x = x.to(device)
-            x = x.detach().numpy()
+            x = x.detach().cpu().numpy()
             np.save(features_path, x)
             print(f'x filepath: {features_path}, shape: {x.shape}')
         else:
@@ -136,8 +136,8 @@ def main(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--root", type=str, default="./datasets/tiny-imagenet-200")
-    parser.add_argument("--split", type=str, default="train")
+    parser.add_argument("--input", type=str, default="/gemini/data-1/train")
+    parser.add_argument("--output", type=str, default="/gemini/output/preprocessed_train")
     parser.add_argument("--batch-size", type=int, default=4)
     parser.add_argument("--num-workers", type=int, default=0,
                         help="number of workers, default is 0, means using main process")

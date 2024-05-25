@@ -56,6 +56,7 @@ def main(args):
     # Setup accelerator:
     accelerator = Accelerator(not CUDA)
     device = accelerator.device
+    # device = "cpu"
 
     print(f'[CUDA] == {CUDA}\n[Derive] == {device}')
 
@@ -66,6 +67,7 @@ def main(args):
     conditions_dir = os.path.join(new_root, f'imagenet{args.image_size}_conditions')
 
     if accelerator.is_main_process:
+    # if True:
         os.makedirs(new_root, exist_ok=True)
         os.makedirs(features_dir, exist_ok=True)
         os.makedirs(labels_dir, exist_ok=True)
@@ -84,7 +86,7 @@ def main(args):
 
     loader = DataLoader(
         dataset,
-        batch_size=1,
+        batch_size=args.batch_size,
         shuffle=False,
         num_workers=args.num_workers,
         pin_memory=True,

@@ -103,8 +103,12 @@ class ImageTools(object):
     @classmethod
     def pil_tensor_to_cv2(cls, tensor):
         # CHW to HWC
-        img = tensor.permute((1, 2, 0)).numpy()
-        return img
+        # img = tensor.permute((1, 2, 0)).numpy()
+        array = tensor.numpy()  # 将tensor数据转为numpy数据
+        array = array * 255 / array.max()  # normalize，将图像数据扩展到[0,255]
+        mat = np.uint8(array)  # float32-->uint8
+        mat = mat.transpose(1, 2, 0)
+        return cv.cvtColor(mat, cv.COLOR_BGR2RGB)
 
     @classmethod
     def pil_tensor_to_pil(cls, tensor):

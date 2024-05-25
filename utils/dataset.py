@@ -1,47 +1,33 @@
-import json
+import os
 
-from torchvision.datasets import CocoDetection
+import numpy as np
+import torch
+from torchvision.datasets import ImageFolder
 
 
-class CustomCocoDataset(CocoDetection):
+class CustomDataset(ImageFolder):
+    def __init__(self, root: str, features_dir, labels_dir, conditions_dir, transform=None):
+        super().__init__(root, transform)
+        self.features_dir = features_dir
+        self.labels_dir = labels_dir
+        self.conditions_dir = conditions_dir
 
-    def __init__(self, root: str, annotation_file: str, make_index: bool, transform=None):
-        super().__init__(root, annotation_file, transform)
-
-        self.annotations = dict()
-        self.index = dict()
-        self.make_index = make_index
-        if self.make_index:
-            self.__create_index__(annotation_file)
+        self.features_files = sorted(os.listdir(features_dir))
+        self.labels_files = sorted(os.listdir(labels_dir))
+        self.conditions_files = sorted(os.listdir(conditions_dir))
 
     def __len__(self):
-        return super().__len__()
+        assert len(self.features_files) == len(self.labels_files) == len(self.conditions_files), \
+            "Number of feature files, label files and condition files should be same"
+        return len(self.features_files)
 
     def __getitem__(self, idx):
-        return super().__getitem__(idx)
+        feature_file = self.features_files[idx]
+        label_file = self.labels_files[idx]
+        condition_file = self.conditions_files[idx]
 
-    def __create_index__(self, annotation_file: str):
-        with open(annotation_file) as f:
-            self.annotations = json.load(f)
-            for idx in range(len(self.annotations["images"])):
-                img = self.annotations["images"][idx]
-                self.index[img["id"]] = [idx, img["file_name"]]
-
-    def get_filename_by_id(self, img_id) -> str:
-        if not self.make_index:
-            return ""
-        return self.index[img_id][1]
-
-    def update_annotations(self, img_id, kv: dict):
-        if not self.make_index:
-            return
-        index = self.index[img_id]
-        idx = index[0]
-        for k, v in kv.items():
-            self.annotations["images"][idx][k] = v
-
-    def save_annotations(self, annotation_file: str):
-        if not self.make_index:
-            return
-        with open(annotation_file, "w") as f:
-            json.dump(self.annotations, f)
+        feature = np.load(os.path.join(self.features_dir, feature_file))
+        label = np.load(os.path.join(self.labels_dir, label_file))
+        condition = np.load(os.path.join(self.conditions_dir, condition_file))
+        print(torch.from_numpy(condition).shape)
+        return torch.from_numpy(feature), torch.from_numpy(label), torch.from_numpy(condition)

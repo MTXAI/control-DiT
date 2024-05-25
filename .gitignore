@@ -1,7 +1,7 @@
 *.pt
 output/*
 .DS_Store
-datasets/COCO_Captions
+datasets/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

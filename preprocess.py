@@ -140,5 +140,5 @@ if __name__ == "__main__":
     parser.add_argument("--num-workers", type=int, default=0,
                         help="number of workers, default is 0, means using main process")
     parser.add_argument("--image-size", type=int, default=256)
-    parser.add_argument("--class-index", type=str, default="./datasets/tiny-imagenet-200/imagenet_class_index.json")
+    parser.add_argument("--class-index", type=str, default="./annotations/imagenet_class_index.json")
     main(parser.parse_args())

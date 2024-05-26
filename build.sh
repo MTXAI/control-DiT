@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+
+# build source code
+rm -rf output/code
+mkdir -p output/code
+
+cp ./*.py output/code
+cp ./*.sh output/code
+
+cp -r ./annotations output/code
+cp -r ./models output/code
+cp -r ./train_options output/code
+cp -r ./utils output/code
+
+cd output/code
+tar -zcvf code.tar.gz ./*

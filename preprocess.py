@@ -76,8 +76,11 @@ def main(args):
     assert args.image_size % 8 == 0, "Image size must be divisible by 8 (for the VAE encoder)."
 
     # Setup data:
+    def resize(pil_image):
+        return center_crop_arr(pil_image, args.image_size)
+
     transform = transforms.Compose([
-        transforms.Lambda(lambda pil_image: center_crop_arr(pil_image, args.image_size)),
+        transforms.Lambda(resize),
         transforms.RandomHorizontalFlip(),
         transforms.ToTensor(),
         transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5], inplace=True)

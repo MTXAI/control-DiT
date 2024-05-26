@@ -56,7 +56,7 @@ class ImageTools(object):
         return image_binary
 
     @classmethod
-    def to_deep(cls, img, model_type="MiDaS_small", cuda=False, model_repo_or_path="intel-isl/MiDaS", source="github"):
+    def load_deep_model(cls, model_type="MiDaS_small", cuda=False, model_repo_or_path="intel-isl/MiDaS", source="github"):
         # gray_img = cls.resize(gray_img, (256, 256))
         # model_type = "DPT_Large"  # MiDaS v3 - Large     (highest accuracy, slowest inference speed)
         # model_type = "DPT_Hybrid"   # MiDaS v3 - Hybrid    (medium accuracy, medium inference speed)
@@ -74,9 +74,15 @@ class ImageTools(object):
             transform = midas_transforms.dpt_transform
         else:
             transform = midas_transforms.small_transform
+
+        return midas, transform
+
+    @classmethod
+    def to_deep(cls, img, cuda, model, transform):
+        device = torch.device("cuda") if cuda else torch.device("cpu")
         input_batch = transform(img).to(device)
         with torch.no_grad():
-            prediction = midas(input_batch)
+            prediction = model(input_batch)
             prediction = torch.nn.functional.interpolate(
                 prediction.unsqueeze(1),
                 size=img.shape[:2],

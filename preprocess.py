@@ -18,6 +18,7 @@ from utils.image_tools import ImageTools
 CUDA = True if torch.cuda.is_available() else False
 Tensor = torch.cuda.FloatTensor if CUDA else torch.FloatTensor
 imgTools = ImageTools()
+midas, transform = None, None
 
 
 def center_crop_arr(pil_image, image_size):
@@ -79,13 +80,12 @@ def main(args):
     def resize(pil_image):
         return center_crop_arr(pil_image, args.image_size)
 
-    transform = transforms.Compose([
+    dataset = ImageFolder(str(root), transform=transforms.Compose([
         transforms.Lambda(resize),
         transforms.RandomHorizontalFlip(),
         transforms.ToTensor(),
         transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5], inplace=True)
-    ])
-    dataset = ImageFolder(str(root), transform=transform)
+    ]))
 
     loader = DataLoader(
         dataset,
@@ -127,8 +127,7 @@ def main(args):
             print(f'y filepath: {labels_path}, has existed')
 
         if not os.path.exists(conditions_path):
-            c = imgTools.to_deep(imgTools.pil_tensor_to_cv2(torch.from_numpy(x[0])), model_type="DPT_Large",
-                                 cuda=CUDA, model_repo_or_path=args.deep_model, source=args.deep_model_source)
+            c = imgTools.to_deep(imgTools.pil_tensor_to_cv2(torch.from_numpy(x[0])), CUDA, midas, transform)
             np.save(conditions_path, c)
             print(f'c filepath: {conditions_path}, shape: {c.shape}')
         else:
@@ -148,4 +147,8 @@ if __name__ == "__main__":
     parser.add_argument("--class-index", type=str, default="./annotations/imagenet_class_index.json")
     parser.add_argument("--deep-model", type=str, default="intel-isl/MiDaS")
     parser.add_argument("--deep-model-source", type=str, default="github")
-    main(parser.parse_args())
+
+    args = parser.parse_args()
+    midas, transform = imgTools.load_deep_model(model_type="DPT_Large", cuda=CUDA,
+                                                model_repo_or_path=args.deep_model, source=args.deep_model_source)
+    main(args)

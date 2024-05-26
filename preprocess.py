@@ -89,7 +89,7 @@ def main(args):
 
     loader = DataLoader(
         dataset,
-        batch_size=1,
+        batch_size=args.batch_size,
         shuffle=False,
         num_workers=args.num_workers,
         pin_memory=True,
@@ -99,42 +99,45 @@ def main(args):
     # create index
     index = create_class_index(args.class_index)
 
+    idx_batch = -1
     idx = -1
-    for x, y in loader:
-        idx += 1
+    for x_batch, y_batch in loader:
+        idx_batch += 1
+        for x, y in zip(x_batch, y_batch):
+            idx += 1
 
-        index_key = dataset.classes[y[0]]
-        print(f'==={idx}/{len(dataset)}, class: {y[0]}-{index_key}-{index[index_key]}')
+            index_key = dataset.classes[y]
+            print(f'===Batch: [{idx_batch+1}/{len(loader)}] Process: [{idx+1}/{len(dataset)}] Class: {y}-{index_key}-{index[index_key]}')
 
-        filename = f'{index[index_key][0]}_{index_key}_{index[index_key][1]}_{idx}.npy'
-        features_path = os.path.join(features_dir, filename)
-        labels_path = os.path.join(labels_dir, filename)
-        conditions_path = os.path.join(conditions_dir, filename)
+            filename = f'{index[index_key][0]}_{index_key}_{index[index_key][1]}_{idx}.npy'
+            features_path = os.path.join(features_dir, filename)
+            labels_path = os.path.join(labels_dir, filename)
+            conditions_path = os.path.join(conditions_dir, filename)
 
-        if not os.path.exists(features_path) or not os.path.exists(conditions_path):
-            x = x.to(device)
-            x = x.detach().cpu().numpy()
-            np.save(features_path, x)
-            print(f'x filepath: {features_path}, shape: {x.shape}')
-        else:
-            print(f'x filepath: {features_path}, has existed')
+            if not os.path.exists(features_path) or not os.path.exists(conditions_path):
+                x = x.to(device)
+                x = x.detach().cpu().numpy()
+                np.save(features_path, x)
+                print(f'x filepath: {features_path}, shape: {x.shape}')
+            else:
+                print(f'x filepath: {features_path}, has existed')
 
-        if not os.path.exists(labels_path):
-            y = np.asarray([index[index_key][0]], dtype=np.int16)
-            np.save(labels_path, y)
-            print(f'y filepath: {labels_path}, shape: {y.shape}')
-        else:
-            print(f'y filepath: {labels_path}, has existed')
+            if not os.path.exists(labels_path):
+                y = np.asarray([index[index_key][0]], dtype=np.int16)
+                np.save(labels_path, y)
+                print(f'y filepath: {labels_path}, shape: {y.shape}')
+            else:
+                print(f'y filepath: {labels_path}, has existed')
 
-        if not os.path.exists(conditions_path):
-            c = imgTools.to_deep(imgTools.pil_tensor_to_cv2(torch.from_numpy(x[0])), CUDA, midas, transform)
-            np.save(conditions_path, c)
-            print(f'c filepath: {conditions_path}, shape: {c.shape}')
-        else:
-            print(f'c filepath: {conditions_path}, has existed')
+            if not os.path.exists(conditions_path):
+                c = imgTools.to_deep(imgTools.pil_tensor_to_cv2(torch.from_numpy(x)), CUDA, midas, transform)
+                np.save(conditions_path, c)
+                print(f'c filepath: {conditions_path}, shape: {c.shape}')
+            else:
+                print(f'c filepath: {conditions_path}, has existed')
 
-        if len(index[index_key]) == 0:
-            print(index_key)
+            if len(index[index_key]) == 0:
+                print(index_key)
 
 
 if __name__ == "__main__":
@@ -143,6 +146,7 @@ if __name__ == "__main__":
     parser.add_argument("--output", type=str, default="/gemini/output/preprocessed_train")
     parser.add_argument("--num-workers", type=int, default=0,
                         help="number of workers, default is 0, means using main process")
+    parser.add_argument("--batch-size", type=int, default=1)
     parser.add_argument("--image-size", type=int, default=256)
     parser.add_argument("--class-index", type=str, default="./annotations/imagenet_class_index.json")
     parser.add_argument("--deep-model", type=str, default="intel-isl/MiDaS")

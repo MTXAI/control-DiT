@@ -56,19 +56,19 @@ class ImageTools(object):
         return image_binary
 
     @classmethod
-    def to_deep(cls, img, model_type="MiDaS_small", cuda=False, model_repo_or_path="intel-isl/MiDaS", ):
+    def to_deep(cls, img, model_type="MiDaS_small", cuda=False, model_repo_or_path="intel-isl/MiDaS", source="github"):
         # gray_img = cls.resize(gray_img, (256, 256))
         # model_type = "DPT_Large"  # MiDaS v3 - Large     (highest accuracy, slowest inference speed)
         # model_type = "DPT_Hybrid"   # MiDaS v3 - Hybrid    (medium accuracy, medium inference speed)
         # model_type = "MiDaS_small"  # MiDaS v2.1 - Small   (lowest accuracy, highest inference speed)
-        midas = torch.hub.load("intel-isl/MiDaS", model_type)
+        midas = torch.hub.load(repo_or_dir=model_repo_or_path, source=source, model=model_type)
         device = torch.device("cuda") if cuda else torch.device("cpu")
         midas.to(device)
         midas.cuda() if cuda else midas.eval()
 
         # https://github.com/isl-org/MiDaS#Accuracy
         # https://pytorch.org/hub/intelisl_midas_v2/
-        midas_transforms = torch.hub.load(repo_or_dir=model_repo_or_path, model="transforms")
+        midas_transforms = torch.hub.load(repo_or_dir=model_repo_or_path, source=source, model="transforms")
 
         if model_type == "DPT_Large" or model_type == "DPT_Hybrid":
             transform = midas_transforms.dpt_transform

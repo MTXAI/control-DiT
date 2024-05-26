@@ -127,7 +127,8 @@ def main(args):
             print(f'y filepath: {labels_path}, has existed')
 
         if not os.path.exists(conditions_path):
-            c = imgTools.to_deep(imgTools.pil_tensor_to_cv2(torch.from_numpy(x[0])), model_type="DPT_Large")
+            c = imgTools.to_deep(imgTools.pil_tensor_to_cv2(torch.from_numpy(x[0])), model_type="DPT_Large",
+                                 cuda=CUDA, model_repo_or_path=args.deep_model, source="local")
             np.save(conditions_path, c)
             print(f'c filepath: {conditions_path}, shape: {c.shape}')
         else:
@@ -146,4 +147,5 @@ if __name__ == "__main__":
                         help="number of workers, default is 0, means using main process")
     parser.add_argument("--image-size", type=int, default=256)
     parser.add_argument("--class-index", type=str, default="./annotations/imagenet_class_index.json")
+    parser.add_argument("--deep-model", type=str, default="intel-isl/MiDaS")
     main(parser.parse_args())

@@ -89,7 +89,7 @@ def main(args):
 
     loader = DataLoader(
         dataset,
-        batch_size=args.batch_size,
+        batch_size=1,
         shuffle=False,
         num_workers=args.num_workers,
         pin_memory=True,
@@ -128,7 +128,7 @@ def main(args):
 
         if not os.path.exists(conditions_path):
             c = imgTools.to_deep(imgTools.pil_tensor_to_cv2(torch.from_numpy(x[0])), model_type="DPT_Large",
-                                 cuda=CUDA, model_repo_or_path=args.deep_model, source="local")
+                                 cuda=CUDA, model_repo_or_path=args.deep_model, source=args.deep_model_source)
             np.save(conditions_path, c)
             print(f'c filepath: {conditions_path}, shape: {c.shape}')
         else:
@@ -142,10 +142,10 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--input", type=str, default="/gemini/data-1/train")
     parser.add_argument("--output", type=str, default="/gemini/output/preprocessed_train")
-    parser.add_argument("--batch-size", type=int, default=4)
     parser.add_argument("--num-workers", type=int, default=0,
                         help="number of workers, default is 0, means using main process")
     parser.add_argument("--image-size", type=int, default=256)
     parser.add_argument("--class-index", type=str, default="./annotations/imagenet_class_index.json")
     parser.add_argument("--deep-model", type=str, default="intel-isl/MiDaS")
+    parser.add_argument("--deep-model-source", type=str, default="github")
     main(parser.parse_args())

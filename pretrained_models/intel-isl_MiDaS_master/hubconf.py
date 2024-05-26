@@ -254,7 +254,7 @@ def DPT_Large(pretrained=True, **kwargs):
 
     if pretrained:
         checkpoint = (
-            "./pretrained_models/checkpoints/dpt_large_384.pt"
+            "/gemini/pretrain/checkpoints/dpt_large_384.pt"
         )
         derive = "cuda" if torch.cuda.is_available() else "cpu"
         state_dict = torch.load(

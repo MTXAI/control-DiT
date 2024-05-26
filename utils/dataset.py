@@ -2,12 +2,12 @@ import os
 
 import numpy as np
 import torch
-from torchvision.datasets import ImageFolder
+from torch.utils.data import Dataset
 
 
-class CustomDataset(ImageFolder):
-    def __init__(self, root: str, features_dir, labels_dir, conditions_dir, transform=None):
-        super().__init__(root, transform)
+class CustomDataset(Dataset):
+    def __init__(self, features_dir, labels_dir, conditions_dir):
+        super().__init__()
         self.features_dir = features_dir
         self.labels_dir = labels_dir
         self.conditions_dir = conditions_dir
@@ -29,5 +29,4 @@ class CustomDataset(ImageFolder):
         feature = np.load(os.path.join(self.features_dir, feature_file))
         label = np.load(os.path.join(self.labels_dir, label_file))
         condition = np.load(os.path.join(self.conditions_dir, condition_file))
-        print(torch.from_numpy(condition).shape)
         return torch.from_numpy(feature), torch.from_numpy(label), torch.from_numpy(condition)

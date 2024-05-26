@@ -83,7 +83,7 @@ class ImageTools(object):
                 mode="bicubic",
                 align_corners=False,
             ).squeeze()
-        output = prediction.cuda().numpy() if cuda else prediction.cpu().numpy()
+        output = prediction.cpu().numpy()
         return output
 
     @classmethod

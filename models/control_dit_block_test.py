@@ -14,7 +14,8 @@ from torchvision.datasets import ImageFolder, ImageNet
 from utils.dataset import CustomDataset
 from utils.image_tools import ImageTools
 
-CUDA = True if torch.cuda.is_available() else False
+# CUDA = True if torch.cuda.is_available() else False
+CUDA = False
 Tensor = torch.cuda.FloatTensor if CUDA else torch.FloatTensor
 Device = "cuda" if CUDA else "cpu"
 imgTools = ImageTools()
@@ -76,27 +77,43 @@ def requires_grad(model, flag=True):
         p.requires_grad = flag
 
 
-# Create model:
+# Load model:
 assert image_size % 8 == 0, "Image size must be divisible by 8 (for the VAE encoder)."
 latent_size = image_size // 8
-model_type = 'DiT-B/4'
+model_type = 'DiT-XL/2'
 dit_model = DiT_models[model_type](
     input_size=latent_size,
     num_classes=1000,
-    learn_sigma=False
-)
+).to(Device)
+
+
+def find_model(model_name):
+    assert os.path.isfile(model_name), f'Could not find DiT checkpoint at {model_name}'
+    checkpoint = torch.load(model_name, map_location=lambda storage, loc: storage)
+    if "ema" in checkpoint:  # supports checkpoints from train.py
+        checkpoint = checkpoint["ema"]
+    return checkpoint
+
+
+ckpt_path = "../pretrained_models/DiT-XL-2-256x256.pt"
+state_dict = find_model(ckpt_path)
+dit_model.load_state_dict(state_dict)
+dit_model.eval()
+# model.eval()  # important!
+# Create model:
 model = control_DiT_models[model_type](
     dit_model=dit_model,
     input_size=latent_size,
     num_classes=1000,
-    learn_sigma=False
-)
+    learn_sigma=False,
+).to(Device)
+model.train()
 # # Note that parameter initialization is done within the DiT constructor
 # model = model.to(Device)
 # ema = deepcopy(model).to(Device)  # Create an EMA of the model for use after training
 # requires_grad(ema, False)
 diffusion = create_diffusion(timestep_respacing="")  # default: 1000 steps, linear noise schedule
-vae = AutoencoderKL.from_pretrained(f"stabilityai/sd-vae-ft-ema").to(Device)
+vae = AutoencoderKL.from_pretrained(f"../pretrained_models/sd-vae-ft-ema").to(Device)
 # Setup optimizer (we used default Adam betas=(0.9, 0.999) and a constant learning rate of 1e-4 in our paper):
 opt = torch.optim.AdamW(model.parameters(), lr=1e-4, weight_decay=0)
 

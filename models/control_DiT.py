@@ -121,14 +121,9 @@ class ControlDiT(nn.Module):
             block = self.blocks[i]
             x = torch.utils.checkpoint.checkpoint(self.ckpt_wrapper(dit_block), x, c)  # (N, T, D)
             z = torch.utils.checkpoint.checkpoint(self.ckpt_wrapper(block), z, c)  # (N, T, D)
-            print(z.sum())
             z = x+z
-            print(x.sum(), z.sum())
-        print(z.shape, z.max(), z.sum())
         z = self.final_layer(z, c)  # (N, T, patch_size ** 2 * out_channels)
-        print(z.shape, z.max(), z.sum())
         z = self.unpatchify(z)  # (N, out_channels, H, W)
-        print(z.shape, z.max(), z.sum())
         return z
 
 

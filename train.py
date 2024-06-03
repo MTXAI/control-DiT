@@ -108,7 +108,6 @@ def main(args):
     # Setup data:
     model_type = args.model_type
     dit_model_path = args.dit_model_path
-    vae_model_path = args.vae_model_path
     image_size = args.image_size
     num_classes = args.num_classes
     epochs = args.epochs
@@ -141,8 +140,7 @@ def main(args):
                     f"\n\t - features_dir: {features_dir}" +
                     f"\n\t - labels_dir: {labels_dir}" +
                     f"\n\t - conditions_dir: {conditions_dir}" +
-                    f"\n\t - dit_model_path: {dit_model_path}" +
-                    f"\n\t - vae_model_path: {vae_model_path}")
+                    f"\n\t - dit_model_path: {dit_model_path}")
         logger.info(f"Train options: " +
                     f"\n\t - model_type: {model_type}" +
                     f"\n\t - epochs: {epochs}" +
@@ -178,7 +176,6 @@ def main(args):
     ema = deepcopy(model).to(device)  # Create an EMA of the model for use after training
     requires_grad(ema, False)
     diffusion = create_diffusion(timestep_respacing="")  # default: 1000 steps, linear noise schedule
-    vae = AutoencoderKL.from_pretrained(vae_model_path).to(device)
     if accelerator.is_main_process:
         logger.info(f"DiT Parameters: {sum(p.numel() for p in model.parameters()):,}")
 
@@ -265,7 +262,6 @@ if __name__ == "__main__":
     parser.add_argument("--output", type=str, default="/gemini/output/control-dit_train_baseline-v4", help="output")
     parser.add_argument("--model-type", type=str, choices=list(DiT_models.keys()), default="DiT-XL/2")
     parser.add_argument("--dit-model-path", type=str, default="/gemini/pretrain2/checkpoints/DiT-XL-2-256x256.pt", help="dit model path")
-    parser.add_argument("--vae-model-path", type=str, default="/gemini/pretrain3/sd-vae-ft-ema", help="vae model path")
 
     parser.add_argument("--image-size", type=int, choices=[256, 512], default=256)
     parser.add_argument("--num-classes", type=int, default=1000)

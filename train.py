@@ -161,8 +161,8 @@ def main(args):
         input_size=latent_size,
         num_classes=num_classes,
     ).to(device)
-    # state_dict = load_dit_model(dit_model_path)
-    # dit_model.load_state_dict(state_dict)
+    state_dict = load_dit_model(dit_model_path)
+    dit_model.load_state_dict(state_dict)
     dit_model.eval()
 
     # Create model:

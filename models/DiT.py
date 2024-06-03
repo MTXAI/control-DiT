@@ -94,10 +94,10 @@ class LabelEmbedder(nn.Module):
         # 如：
         # >>> import torch
         # >>> print(torch.rand([2,3]))
-        # tensor([[0.2686, 0.8761, 0.4339],
+        # tensor([[0.0686, 0.8761, 0.4339],
         #         [0.6835, 0.2636, 0.7525]])
         # >>> print(torch.rand([2,3]) > 0.1)
-        # tensor([[True, True, True],
+        # tensor([[False, True, True],
         #         [True, True, True]])
         if force_drop_ids is None:
             drop_ids = torch.rand(labels.shape[0], device=labels.device) < self.dropout_prob

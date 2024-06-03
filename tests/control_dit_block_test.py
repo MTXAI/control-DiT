@@ -19,8 +19,9 @@ CUDA = False
 Tensor = torch.cuda.FloatTensor if CUDA else torch.FloatTensor
 Device = "cuda" if CUDA else "cpu"
 imgTools = ImageTools()
+real = True
 
-root = "../datasets/imagenet2012_processed_train"
+root = "../datasets/tiny-imagenet-200_processed_train"
 batch_size = 1
 num_workers = 0
 image_size = 256
@@ -47,12 +48,12 @@ def main():
     x, y, z = None, None, None
     for x, y, z in loader:
         idx += 1
-        if idx < 11:
-            continue
         x = x.to(Device)
         y = y.to(Device)
         z = z.to(Device)
-
+        x = x.squeeze(dim=1)
+        y = y.squeeze(dim=1)
+        z = z.squeeze(dim=1)
         if idx > 0:
             break
 
@@ -95,9 +96,10 @@ def find_model(model_name):
     return checkpoint
 
 
-ckpt_path = "../pretrained_models/DiT-XL-2-256x256.pt"
-state_dict = find_model(ckpt_path)
-dit_model.load_state_dict(state_dict)
+if not real:
+    ckpt_path = "../pretrained_models/DiT-XL-2-256x256.pt"
+    state_dict = find_model(ckpt_path)
+    dit_model.load_state_dict(state_dict)
 # dit_model.learn_sigma = False
 dit_model.eval()
 # model.eval()  # important!
@@ -114,8 +116,10 @@ model.train()
 # ema = deepcopy(model).to(Device)  # Create an EMA of the model for use after training
 # requires_grad(ema, False)
 diffusion = create_diffusion(timestep_respacing="")  # default: 1000 steps, linear noise schedule
-vae = AutoencoderKL.from_pretrained(f"../pretrained_models/sd-vae-ft-ema").to(Device)
-# vae = AutoencoderKL.from_pretrained(f"stabilityai/sd-vae-ft-ema").to(Device)
+if not real:
+    vae = AutoencoderKL.from_pretrained(f"../pretrained_models/sd-vae-ft-ema").to(Device)
+else:
+    vae = AutoencoderKL.from_pretrained(f"stabilityai/sd-vae-ft-ema").to(Device)
 # Setup optimizer (we used default Adam betas=(0.9, 0.999) and a constant learning rate of 1e-4 in our paper):
 opt = torch.optim.AdamW(model.parameters(), lr=1e-4, weight_decay=0)
 
@@ -144,16 +148,9 @@ opt = torch.optim.AdamW(model.parameters(), lr=1e-4, weight_decay=0)
 # model, opt, loader = accelerator.prepare(model, opt, loader)
 
 x = x.squeeze(dim=1)
-b = torch.zeros(x.shape)
-z = z.expand_as(b)
-print(z[0][0] == z[0][1])
-# z = b
-with torch.no_grad():
-            # Map input images to latent space + normalize latents:
-    x = vae.encode(x).latent_dist.sample().mul_(0.18215)
-    z = vae.encode(z).latent_dist.sample().mul_(0.18215)
 y = y.squeeze(dim=1)
 z = z.squeeze(dim=1)
+print(x.shape, y.shape, z.shape)
 t = torch.randint(0, diffusion.num_timesteps, (z.shape[0],), device=Device)
 nx = model.forward(x, y, t, z)
 print(nx.shape)

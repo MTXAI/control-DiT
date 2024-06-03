@@ -172,17 +172,20 @@ class ControlDiT(nn.Module):
     def forward(self, x, t, y, z):
         """
         Forward pass of ControlDiT.
-        x: (N, C, H, W) tensor of spatial inputs (images or latent representations of images)
+        x: (N, C, H, W) feature with noise ,tensor of spatial inputs (images or latent representations of images)
         t: (N,) tensor of diffusion timesteps
         y: (N,) tensor of class labels
+        z: (N, C, H, W) z = origin control condition z + feature with noise x
         """
         x, c = self.dit_forward(x, t, y)
         z = self.z_embedder(z) + self.pos_embed  # (N, T, D), where T = H * W / patch_size ** 2
+        z = operator_add(x, z)
         for i in range(len(self.blocks)):
             dit_block = self.dit.blocks[i]
             block = self.blocks[i]
             x = torch.utils.checkpoint.checkpoint(self.ckpt_wrapper(dit_block), x, c)  # (N, T, D)
-            z = torch.utils.checkpoint.checkpoint(self.ckpt_wrapper(block), operator_add(x, z), c)  # (N, T, D)
+            z = torch.utils.checkpoint.checkpoint(self.ckpt_wrapper(block), z, c)  # (N, T, D)
+            z = operator_add(x, z)
         z = self.final_layer(z, c)  # (N, T, patch_size ** 2 * out_channels)
         z = self.unpatchify(z)  # (N, out_channels, H, W)
         return z

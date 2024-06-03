@@ -12,7 +12,7 @@ dit_model=$GEMINI_PRETRAIN/checkpoints/DiT-XL-2-256x256.pt
 image_size=256
 
 epochs=1000
-batch_size=128
+batch_size=256
 num_workers=8
 
 python3 $code/train.py --input $input --output $output \

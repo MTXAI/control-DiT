@@ -203,19 +203,23 @@ def main(args):
         if accelerator.is_main_process:
             logger.info(f"Beginning epoch {epoch}...")
         for x, y, z in loader:
+            print(x.shape, y.shape, z.shape)
             x = x.to(device)
             y = y.to(device)
             z = z.to(device)
             z = z.expand_as(torch.zeros(x.shape))
+            print(x.shape, y.shape, z.shape)
             with torch.no_grad():
                 # Map input images to latent space + normalize latents:
                 x = vae.encode(x).latent_dist.sample().mul_(0.18215)
                 z = vae.encode(z).latent_dist.sample().mul_(0.18215)
+                print(x.shape, z.shape)
             x = x.squeeze(dim=1)
             y = y.squeeze(dim=1)
             z = z.squeeze(dim=1)
+            print(x.shape, y.shape, z.shape)
             t = torch.randint(0, diffusion.num_timesteps, (x.shape[0],), device=device)
-            model_kwargs = dict(y=y, z=z)
+            model_kwargs = dict(y=y, z=z) # 这里多加一个参数加不进去
             loss_dict = diffusion.training_losses(model, x, t, model_kwargs)
             loss = loss_dict["loss"].mean()
             opt.zero_grad()

@@ -17,9 +17,6 @@ from timm.models.vision_transformer import PatchEmbed, Attention, Mlp
 
 
 def modulate(x, shift, scale):
-    # 对输入张量 x 进行缩放和平移，使得输出张量在形状和维度上保持与 x 一致，
-    # 但数值上经过了变换，输入 shift 和 scale 来自于 adaLN_modulation。
-    # 缩放和偏移处理用于使神经网络输出保留原有的特性
     return x * (1 + scale.unsqueeze(1)) + shift.unsqueeze(1)
 
 
@@ -35,9 +32,9 @@ class TimestepEmbedder(nn.Module):
     def __init__(self, hidden_size, frequency_embedding_size=256):
         super().__init__()
         self.mlp = nn.Sequential(
-            nn.Linear(frequency_embedding_size, hidden_size, bias=True),  # 线性变换
-            nn.SiLU(),  # 激活函数
-            nn.Linear(hidden_size, hidden_size, bias=True),  # 线性变换
+            nn.Linear(frequency_embedding_size, hidden_size, bias=True),
+            nn.SiLU(),
+            nn.Linear(hidden_size, hidden_size, bias=True),
         )
         self.frequency_embedding_size = frequency_embedding_size
 
@@ -53,9 +50,6 @@ class TimestepEmbedder(nn.Module):
         """
         # https://github.com/openai/glide-text2im/blob/main/glide_text2im/nn.py
         half = dim // 2
-        # 按照 dim 一分为二，前半部分计算余弦值，后半部分计算正弦值
-        # 再将时间步 t 乘以频率张量 freqs，然后 cat 起来
-        # 最后对奇数维度做补齐
         freqs = torch.exp(
             -math.log(max_period) * torch.arange(start=0, end=half, dtype=torch.float32) / half
         ).to(device=t.device)
@@ -67,7 +61,7 @@ class TimestepEmbedder(nn.Module):
 
     def forward(self, t):
         t_freq = self.timestep_embedding(t, self.frequency_embedding_size)
-        t_emb = self.mlp(t_freq)  # 计算 embedding
+        t_emb = self.mlp(t_freq)
         return t_emb
 
 
@@ -77,8 +71,6 @@ class LabelEmbedder(nn.Module):
     """
 
     def __init__(self, num_classes, hidden_size, dropout_prob):
-        # 在对 class label 初始化 embedding 时，按照 dropout_prob 概率随机
-        # 丢弃一部分 class，并且把丢弃的一部分 class 设为 others 类别
         super().__init__()
         use_cfg_embedding = dropout_prob > 0
         self.embedding_table = nn.Embedding(num_classes + use_cfg_embedding, hidden_size)
@@ -89,21 +81,10 @@ class LabelEmbedder(nn.Module):
         """
         Drops labels to enable classifier-free guidance.
         """
-
-        # 获取待丢弃的 label，按照 shape 随机生成浮点数，然后根据是否 < self.dropout_prob 将浮点数矩阵变换为 bool 矩阵，
-        # 如：
-        # >>> import torch
-        # >>> print(torch.rand([2,3]))
-        # tensor([[0.0686, 0.8761, 0.4339],
-        #         [0.6835, 0.2636, 0.7525]])
-        # >>> print(torch.rand([2,3]) > 0.1)
-        # tensor([[False, True, True],
-        #         [True, True, True]])
         if force_drop_ids is None:
             drop_ids = torch.rand(labels.shape[0], device=labels.device) < self.dropout_prob
         else:
             drop_ids = force_drop_ids == 1
-        # 按照 bool 矩阵丢弃 class
         labels = torch.where(drop_ids, self.num_classes, labels)
         return labels
 
@@ -111,7 +92,6 @@ class LabelEmbedder(nn.Module):
         use_dropout = self.dropout_prob > 0
         if (train and use_dropout) or (force_drop_ids is not None):
             labels = self.token_drop(labels, force_drop_ids)
-        # 按照 label 张量获取其 embedding 张量
         embeddings = self.embedding_table(labels)
         return embeddings
 
@@ -127,16 +107,12 @@ class DiTBlock(nn.Module):
 
     def __init__(self, hidden_size, num_heads, mlp_ratio=4.0, **block_kwargs):
         super().__init__()
-        # 处理图像特征输入的 LN
         self.norm1 = nn.LayerNorm(hidden_size, elementwise_affine=False, eps=1e-6)
-        # 多头自注意力层
         self.attn = Attention(hidden_size, num_heads=num_heads, qkv_bias=True, **block_kwargs)
-        # 处理多头自注意力层输出的 LN
         self.norm2 = nn.LayerNorm(hidden_size, elementwise_affine=False, eps=1e-6)
         mlp_hidden_dim = int(hidden_size * mlp_ratio)
         approx_gelu = lambda: nn.GELU(approximate="tanh")
         self.mlp = Mlp(in_features=hidden_size, hidden_features=mlp_hidden_dim, act_layer=approx_gelu, drop=0)
-        # 从 timestep+label 中学习额外的信息，并划分为 6 份，融合到 x 中
         self.adaLN_modulation = nn.Sequential(
             nn.SiLU(),
             nn.Linear(hidden_size, 6 * hidden_size, bias=True)
@@ -156,9 +132,7 @@ class FinalLayer(nn.Module):
 
     def __init__(self, hidden_size, patch_size, out_channels):
         super().__init__()
-        # 最后一层处理前做一次标准化
         self.norm_final = nn.LayerNorm(hidden_size, elementwise_affine=False, eps=1e-6)
-        # 将隐向量大小线性变换到图像大小
         self.linear = nn.Linear(hidden_size, patch_size * patch_size * out_channels, bias=True)
         self.adaLN_modulation = nn.Sequential(
             nn.SiLU(),

@@ -10,6 +10,7 @@ import torchvision.transforms as transforms
 import torch.distributed as dist
 from PIL import Image
 from accelerate import Accelerator
+from diffusers import AutoencoderKL
 from torch.utils.data import DataLoader
 from torchvision.datasets import ImageFolder, ImageNet
 
@@ -89,55 +90,66 @@ def main(args):
 
     loader = DataLoader(
         dataset,
-        batch_size=args.batch_size,
+        batch_size=1,
         shuffle=False,
         num_workers=args.num_workers,
         pin_memory=True,
         drop_last=True
     )
 
+    vae = AutoencoderKL.from_pretrained(args.vae_model).to(device)
+
     # create index
     index = create_class_index(args.class_index)
 
-    idx_batch = -1
     idx = -1
-    for x_batch, y_batch in loader:
-        idx_batch += 1
-        for x, y in zip(x_batch, y_batch):
-            idx += 1
+    for x, y in loader:
+        idx += 1
 
-            index_key = dataset.classes[y]
-            print(f'===Batch: [{idx_batch+1}/{len(loader)}] Process: [{idx+1}/{len(dataset)}] Class: {y}-{index_key}-{index[index_key]}')
+        y = y.to(device)
+        y = y.detach().cpu().numpy()
+        index_key = dataset.classes[y[0]]
 
-            filename = f'{index[index_key][0]}_{index_key}_{index[index_key][1]}_{idx}.npy'
-            features_path = os.path.join(features_dir, filename)
-            labels_path = os.path.join(labels_dir, filename)
-            conditions_path = os.path.join(conditions_dir, filename)
+        filename = f'{index[index_key][0]}_{index_key}_{index[index_key][1]}_{idx}.npy'
+        features_path = os.path.join(features_dir, filename)
+        labels_path = os.path.join(labels_dir, filename)
+        conditions_path = os.path.join(conditions_dir, filename)
 
-            if not os.path.exists(features_path) or not os.path.exists(conditions_path):
-                x = x.to(device)
-                x = x.detach().cpu().numpy()
-                np.save(features_path, x)
-                print(f'x filepath: {features_path}, shape: {x.shape}')
-            else:
-                print(f'x filepath: {features_path}, has existed')
+        print(f'===Process: [{idx + 1}/{len(dataset)}]:')
 
-            if not os.path.exists(labels_path):
-                y = np.asarray([index[index_key][0]], dtype=np.int16)
-                np.save(labels_path, y)
-                print(f'y filepath: {labels_path}, shape: {y.shape}')
-            else:
-                print(f'y filepath: {labels_path}, has existed')
+        if not os.path.exists(labels_path):
+            print(f'Class: {y}-{index_key}-{index[index_key]}')
+            y = np.asarray([[index[index_key][0]]], dtype=np.int16)
+            np.save(labels_path, y)
+            print(f'y filepath: {labels_path}, shape: {y.shape}')
+        else:
+            print(f'y filepath: {labels_path}, has existed')
 
-            if not os.path.exists(conditions_path):
-                c = imgTools.to_deep(imgTools.pil_tensor_to_cv2(torch.from_numpy(x)), CUDA, midas, transform)
-                np.save(conditions_path, c)
-                print(f'c filepath: {conditions_path}, shape: {c.shape}')
-            else:
-                print(f'c filepath: {conditions_path}, has existed')
+        if not os.path.exists(features_path) or not os.path.exists(conditions_path):
+            x = x.to(device)
 
-            if len(index[index_key]) == 0:
-                print(index_key)
+            with torch.no_grad():
+                # Map input images to latent space + normalize latents:
+                feature = vae.encode(x).latent_dist.sample().mul_(0.18215)
+                feature = feature.detach().cpu().numpy()
+                np.save(features_path, feature)
+                print(f'feature filepath: {features_path}, shape: {feature.shape}')
+
+            z = imgTools.to_deep(imgTools.pil_tensor_to_cv2(x[0]), CUDA, midas, transform)
+            z = torch.from_numpy(z).expand_as(x[0])
+            z = z.expand_as(x)
+            with torch.no_grad():
+                # Map input images to latent space + normalize latents:
+                condition = vae.encode(z).latent_dist.sample().mul_(0.18215)
+                condition = condition.detach().cpu().numpy()
+                np.save(features_path, feature)
+                np.save(conditions_path, condition)
+                print(f'condition filepath: {conditions_path}, shape: {condition.shape}')
+        else:
+            print(f'feature filepath: {features_path} and condition filepath: {conditions_path}, has existed')
+
+        if len(index[index_key]) == 0:
+            print(index_key)
 
 
 if __name__ == "__main__":
@@ -146,10 +158,10 @@ if __name__ == "__main__":
     parser.add_argument("--output", type=str, default="/gemini/output/preprocessed_train")
     parser.add_argument("--num-workers", type=int, default=0,
                         help="number of workers, default is 0, means using main process")
-    parser.add_argument("--batch-size", type=int, default=1)
     parser.add_argument("--image-size", type=int, default=256)
     parser.add_argument("--class-index", type=str, default="./annotations/imagenet_class_index.json")
     parser.add_argument("--deep-model", type=str, default="intel-isl/MiDaS")
+    parser.add_argument("--vae-model", type=str, default="stabilityai/sd-vae-ft-ema")
     parser.add_argument("--deep-model-source", type=str, default="github")
 
     args = parser.parse_args()

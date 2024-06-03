@@ -4,3 +4,4 @@ accelerate
 pycocotools
 opencv-python
 jupyter
+scipy

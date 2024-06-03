@@ -89,8 +89,7 @@ class ImageTools(object):
                 mode="bicubic",
                 align_corners=False,
             ).squeeze()
-        output = prediction.cpu().numpy()
-        return output
+        return prediction
 
     @classmethod
     def deep_2_cv2(cls, deep_img):
@@ -110,7 +109,7 @@ class ImageTools(object):
     def pil_tensor_to_cv2(cls, tensor):
         # CHW to HWC
         # img = tensor.permute((1, 2, 0)).numpy()
-        array = tensor.numpy()  # 将tensor数据转为numpy数据
+        array = tensor.cpu().numpy()  # 将tensor数据转为numpy数据
         array = array * 255 / array.max()  # normalize，将图像数据扩展到[0,255]
         mat = np.uint8(array)  # float32-->uint8
         mat = mat.transpose(1, 2, 0)

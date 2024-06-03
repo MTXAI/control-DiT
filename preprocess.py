@@ -97,6 +97,8 @@ def main(args):
         drop_last=True
     )
 
+    midas, transform = imgTools.load_deep_model(model_type="DPT_Large", cuda=CUDA,
+                                                model_repo_or_path=args.deep_model, source=args.deep_model_source)
     vae = AutoencoderKL.from_pretrained(args.vae_model).to(device)
 
     # create index
@@ -127,7 +129,6 @@ def main(args):
 
         if not os.path.exists(features_path) or not os.path.exists(conditions_path):
             x = x.to(device)
-
             with torch.no_grad():
                 # Map input images to latent space + normalize latents:
                 feature = vae.encode(x).latent_dist.sample().mul_(0.18215)
@@ -136,8 +137,9 @@ def main(args):
                 print(f'feature filepath: {features_path}, shape: {feature.shape}')
 
             z = imgTools.to_deep(imgTools.pil_tensor_to_cv2(x[0]), CUDA, midas, transform)
-            z = torch.from_numpy(z).expand_as(x[0])
+            z = z.expand_as(x[0])
             z = z.expand_as(x)
+            z = z.to(device)
             with torch.no_grad():
                 # Map input images to latent space + normalize latents:
                 condition = vae.encode(z).latent_dist.sample().mul_(0.18215)
@@ -165,6 +167,4 @@ if __name__ == "__main__":
     parser.add_argument("--deep-model-source", type=str, default="github")
 
     args = parser.parse_args()
-    midas, transform = imgTools.load_deep_model(model_type="DPT_Large", cuda=CUDA,
-                                                model_repo_or_path=args.deep_model, source=args.deep_model_source)
     main(args)

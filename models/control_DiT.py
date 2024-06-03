@@ -118,7 +118,6 @@ class ControlDiT(nn.Module):
                 if module.bias is not None:
                     nn.init.constant_(module.bias, 0)
 
-        self.dit.eval()
         self.apply(_basic_init)
 
         # Initialize (and freeze) pos_embed by sin-cos embedding:

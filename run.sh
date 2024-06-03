@@ -1,12 +1,23 @@
 #!/usr/bin/env bash
 
 set -x
-input=$GEMINI_DATA_IN1/imagenette2/train/
-output=$GEMINI_DATA_OUT/imagenette_processed_train
-code=$GEMINI_CODE/code
-index=$code/annotations/imagenet_class_index.json
-pretrain=$GEMINI_PRETRAIN/intel-isl_MiDaS_master
 
-python3 $code/preprocess.py --input $input --output $output \
-  --num-workers 4 --image-size 256 --class-index $index \
-  --deep-model $pretrain --deep-model-source local --batch-size 4
+code=$GEMINI_CODE/code
+
+input=$GEMINI_DATA_OUT/imagenette_processed_train
+output=$GEMINI_DATA_OUT/control-dit_train_baseline-v4
+model_type=DiT-XL/2
+dit_model=$GEMINI_PRETRAIN2/checkpoints/DiT-XL-2-256x256.pt
+vae_model=$GEMINI_PRETRAIN3/sd-vae-ft-ema
+
+image_size=256
+
+epochs=1000
+batch_size=128
+num_workers=8
+
+python3 $code/train.py --input $input --output $output \
+  --model-type $model_type --dit-model-path $dit_model \
+  --vae-model-path vae_model --image-size $image_size \
+  --epochs $epochs --batch-size $batch_size \
+  --num-workers $num_workers

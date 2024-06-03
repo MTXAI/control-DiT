@@ -161,8 +161,8 @@ def main(args):
         input_size=latent_size,
         num_classes=num_classes,
     ).to(device)
-    state_dict = load_dit_model(dit_model_path)
-    dit_model.load_state_dict(state_dict)
+    # state_dict = load_dit_model(dit_model_path)
+    # dit_model.load_state_dict(state_dict)
     dit_model.eval()
 
     # Create model:
@@ -203,9 +203,9 @@ def main(args):
             x = x.to(device)
             y = y.to(device)
             z = z.to(device)
-            x = x.squeeze(dim=1)
-            y = y.squeeze(dim=1).long()
-            z = z.squeeze(dim=1)
+            x = x[0].squeeze(dim=1)
+            y = y[0].squeeze(dim=1).long()
+            z = z[0].squeeze(dim=1)
             t = torch.randint(0, diffusion.num_timesteps, (x.shape[0],), device=device)
             model_kwargs = dict(y=y, z=z)
             loss_dict = diffusion.training_losses(model, x, t, model_kwargs)

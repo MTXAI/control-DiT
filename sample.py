@@ -9,7 +9,9 @@ Sample new images from a pre-trained DiT.
 """
 import os
 
+import numpy as np
 import torch
+from matplotlib import pyplot as plt
 
 from utils.image_tools import ImageTools
 
@@ -89,20 +91,27 @@ def main(args):
     y = torch.cat([y, y_null], 0)
 
     ix = imgTools.read(args.test_image)
+    ix = imgTools.resize(ix, (args.image_size, args.image_size))
     z = imgTools.to_deep(ix, False, midas, transform)
-    z = z.expand_as(x[0])
-    z = z.expand_as(x)
-    z = z.to(device)
+    plt.imshow(z)
+    ix = imgTools.cv2_to_pil_tensor(ix)
+    z = torch.from_numpy(z).expand_as(ix[0])
+    z = z.expand_as(ix)
+    z = z.detach().cpu().numpy()
+    z = torch.tensor([z], device=device)
     with torch.no_grad():
         # Map input images to latent space + normalize latents:
         z = vae.encode(z).latent_dist.sample().mul_(0.18215)
-        z = z.detach().cpu().numpy()
     model_kwargs = dict(y=y, z=z, cfg_scale=args.cfg_scale)
+    # model_kwargs = dict(y=y, cfg_scale=args.cfg_scale)
 
     # Sample images:
     samples = diffusion.p_sample_loop(
         control_dit_model.forward_with_cfg, x.shape, x, clip_denoised=False, model_kwargs=model_kwargs, progress=True, device=device
     )
+    # samples = diffusion.p_sample_loop(
+    #     dit_model.forward_with_cfg, x.shape, x, clip_denoised=False, model_kwargs=model_kwargs, progress=True, device=device
+    # )
     samples, _ = samples.chunk(2, dim=0)  # Remove null class samples
     samples = vae.decode(samples / 0.18215).sample
 
@@ -122,6 +131,7 @@ if __name__ == "__main__":
     parser.add_argument("--dit-ckpt", type=str, default=None)
     parser.add_argument("--control-dit-ckpt", type=str, default=None)
     parser.add_argument("--deep-model", type=str, default="intel-isl/MiDaS")
+    parser.add_argument("--deep-model-source", type=str, default="local")
     parser.add_argument("--vae-model", type=str, default="stabilityai/sd-vae-ft-ema")
     parser.add_argument("--test-image", type=str, default=None)
     args = parser.parse_args()

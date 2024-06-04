@@ -240,10 +240,10 @@ def main(args):
             if train_steps % ckpt_every == 0 and train_steps > 0:
                 if accelerator.is_main_process:
                     checkpoint = {
-                        "model": model.module.state_dict(),
+                        # "model": model.state_dict(),
                         "ema": ema.state_dict(),
-                        "opt": opt.state_dict(),
-                        "args": args
+                        # "opt": opt.state_dict(),
+                        # "args": args
                     }
                     checkpoint_path = f"{checkpoint_dir}/{train_steps:07d}.pt"
                     torch.save(checkpoint, checkpoint_path)
@@ -253,10 +253,10 @@ def main(args):
     if accelerator.is_main_process:
         if train_steps % ckpt_every != 0 and train_steps > 0:
             checkpoint = {
-                "model": model.module.state_dict(),
+                # "model": model.state_dict(),
                 "ema": ema.state_dict(),
-                "opt": opt.state_dict(),
-                "args": args
+                # "opt": opt.state_dict(),
+                # "args": args
             }
             checkpoint_path = f"{checkpoint_dir}/{train_steps:07d}.pt"
             torch.save(checkpoint, checkpoint_path)

@@ -21,4 +21,4 @@ dit_model=$GEMINI_PRETRAIN/checkpoints/${model_name}
 time accelerate launch $code/train.py --input $input --output $output \
   --model-type $model_type --dit-model-path $dit_model \
   --image-size $image_size --epochs $epochs --batch-size $batch_size \
-  --num-workers $num_workers --log-every $logs --ckpt-every $ckpts
+  --num-workers $num_workers --log-every $logs --ckpt-every $ckpts --only-ema

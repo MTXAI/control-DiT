@@ -290,7 +290,7 @@ if __name__ == "__main__":
     parser.add_argument("--image-size", type=int, choices=[256, 512], default=256)
     parser.add_argument("--num-classes", type=int, default=1000)
 
-    parser.add_argument("--epochs", type=int, default=1000)
+    parser.add_argument("--epochs", type=int, default=500)
     parser.add_argument("--batch-size", type=int, default=256, help="batch size should >= 6*2")
     parser.add_argument("--num-workers", type=int, default=4)
     parser.add_argument("--ckpt-every", type=int, default=10_000)

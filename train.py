@@ -205,10 +205,8 @@ def main(args):
             z = z.to(device)
             x = x.squeeze(dim=1)
             y = y.squeeze(dim=1).long()
+            y = y.squeeze(dim=1)
             z = z.squeeze(dim=1)
-            if x.shape[0] != batch_size:
-                logger.warn("Batch size mismatch, quit!")
-                break
             t = torch.randint(0, diffusion.num_timesteps, (x.shape[0],), device=device)
             model_kwargs = dict(y=y, z=z)
             loss_dict = diffusion.training_losses(model, x, t, model_kwargs)
@@ -251,6 +249,18 @@ def main(args):
                     torch.save(checkpoint, checkpoint_path)
                     logger.info(f"Saved checkpoint to {checkpoint_path}")
 
+    # final save
+    if accelerator.is_main_process:
+        if train_steps % ckpt_every != 0 and train_steps > 0:
+            checkpoint = {
+                "model": model.module.state_dict(),
+                "ema": ema.state_dict(),
+                "opt": opt.state_dict(),
+                "args": args
+            }
+            checkpoint_path = f"{checkpoint_dir}/{train_steps:07d}.pt"
+            torch.save(checkpoint, checkpoint_path)
+            logger.info(f"Saved checkpoint to {checkpoint_path}")
     model.eval()  # important! This disables randomized embedding dropout
     # do any sampling/FID calculation/etc. with ema (or model) in eval mode ...
 
@@ -271,7 +281,7 @@ if __name__ == "__main__":
     parser.add_argument("--num-classes", type=int, default=1000)
 
     parser.add_argument("--epochs", type=int, default=1000)
-    parser.add_argument("--batch-size", type=int, default=256, help="batch size should >= 6")
+    parser.add_argument("--batch-size", type=int, default=256, help="batch size should >= 6*2")
     parser.add_argument("--num-workers", type=int, default=4)
 
     parser.add_argument("--log-every", type=int, default=100)

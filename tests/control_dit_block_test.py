@@ -19,10 +19,10 @@ CUDA = False
 Tensor = torch.cuda.FloatTensor if CUDA else torch.FloatTensor
 Device = "cuda" if CUDA else "cpu"
 imgTools = ImageTools()
-real = True
+real = False
 
-root = "../datasets/tiny-imagenet-200_processed_train"
-batch_size = 7
+root = "../datasets/imagenette_processed_train"
+batch_size = 256
 num_workers = 0
 image_size = 256
 
@@ -39,7 +39,7 @@ loader = DataLoader(
     shuffle=False,
     num_workers=num_workers,
     pin_memory=True,
-    drop_last=True
+    drop_last=True,
 )
 
 
@@ -51,9 +51,6 @@ def main():
         x = x.to(Device)
         y = y.to(Device)
         z = z.to(Device)
-
-        if x.shape[0] != batch_size:
-            break
         if idx > 0:
             break
 
@@ -153,13 +150,4 @@ z = z.squeeze(dim=1)
 print(x.shape, y.shape, z.shape)
 t = torch.randint(0, diffusion.num_timesteps, (z.shape[0],), device=Device)
 nx = model.forward(x, y, t, z)
-print(nx.shape)
-
-
-from torchvision.utils import save_image
-
 print(nx.shape, nx.max())
-sample = vae.decode(nx / 0.18215).sample
-print(sample.shape)
-# Save and display images:
-save_image(sample, "sample.png", nrow=4, normalize=True, value_range=(0, 255))

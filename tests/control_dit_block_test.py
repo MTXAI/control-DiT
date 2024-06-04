@@ -53,9 +53,6 @@ def main():
         z = z.to(Device)
         print(idx, x.shape, y.shape, z.shape)
 
-        x = x.squeeze(dim=1)
-        y = y.squeeze(dim=1)
-        z = z.squeeze(dim=1)
         if x.shape[0] != batch_size:
             break
         if idx > 0:

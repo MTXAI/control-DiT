@@ -272,7 +272,7 @@ if __name__ == "__main__":
     parser.add_argument("--num-workers", type=int, default=4)
 
     parser.add_argument("--log-every", type=int, default=100)
-    parser.add_argument("--ckpt-every", type=int, default=50_000)
+    parser.add_argument("--ckpt-every", type=int, default=10_000)
 
     args = parser.parse_args()
     main(args)

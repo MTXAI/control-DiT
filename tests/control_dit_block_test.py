@@ -22,7 +22,7 @@ imgTools = ImageTools()
 real = True
 
 root = "../datasets/tiny-imagenet-200_processed_train"
-batch_size = 1
+batch_size = 7
 num_workers = 0
 image_size = 256
 
@@ -35,7 +35,7 @@ dataset = CustomDataset(features_dir=features_dir, labels_dir=labels_dir, condit
 
 loader = DataLoader(
     dataset,
-    batch_size=2,
+    batch_size=batch_size,
     shuffle=False,
     num_workers=num_workers,
     pin_memory=True,
@@ -51,18 +51,17 @@ def main():
         x = x.to(Device)
         y = y.to(Device)
         z = z.to(Device)
-        print(idx, x.shape, y.shape, z.shape)
 
         if x.shape[0] != batch_size:
             break
         if idx > 0:
             break
 
-    print(idx, x.shape, y.shape, z.shape)
     return x, y, z
 
 
 x, y, z = main()
+print(x.shape, y.shape, z.shape)
 
 from diffusers import AutoencoderKL
 from copy import deepcopy
@@ -147,7 +146,7 @@ opt = torch.optim.AdamW(model.parameters(), lr=1e-4, weight_decay=0)
 # model.train()  # important! This enables embedding dropout for classifier-free guidance
 # ema.eval()  # EMA model should always be in eval mode
 # model, opt, loader = accelerator.prepare(model, opt, loader)
-
+print(x.shape, y.shape, z.shape)
 x = x.squeeze(dim=1)
 y = y.squeeze(dim=1)
 z = z.squeeze(dim=1)

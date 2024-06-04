@@ -114,6 +114,7 @@ def main(args):
     batch_size = int(args.batch_size // accelerator.num_processes)
     num_workers = args.num_workers
     ckpt_every = args.ckpt_every
+    only_ema = args.only_ema
     log_every = args.log_every
 
     features_dir = os.path.join(args.input, f'imagenet{image_size}_features')
@@ -147,6 +148,7 @@ def main(args):
                     f"\n\t - batch_size: {batch_size}" +
                     f"\n\t - num_workers: {num_workers}" +
                     f"\n\t - ckpt_every: {ckpt_every}" +
+                    f"\n\t - only_ema: {only_ema}" +
                     f"\n\t - log_every: {log_every}")
         logger.info(f"Dataset abstract: " +
                     f"\n\t - length: {len(dataset)}" +
@@ -240,11 +242,15 @@ def main(args):
             if train_steps % ckpt_every == 0 and train_steps > 0:
                 if accelerator.is_main_process:
                     checkpoint = {
-                        # "model": model.state_dict(),
                         "ema": ema.state_dict(),
-                        # "opt": opt.state_dict(),
-                        # "args": args
                     }
+                    if not only_ema:
+                        checkpoint = {
+                            "model": model.state_dict(),
+                            "ema": ema.state_dict(),
+                            "opt": opt.state_dict(),
+                            "args": args
+                        }
                     checkpoint_path = f"{checkpoint_dir}/{train_steps:07d}.pt"
                     torch.save(checkpoint, checkpoint_path)
                     logger.info(f"Saved checkpoint to {checkpoint_path}")
@@ -253,11 +259,15 @@ def main(args):
     if accelerator.is_main_process:
         if train_steps % ckpt_every != 0 and train_steps > 0:
             checkpoint = {
-                # "model": model.state_dict(),
                 "ema": ema.state_dict(),
-                # "opt": opt.state_dict(),
-                # "args": args
             }
+            if not only_ema:
+                checkpoint = {
+                    "model": model.state_dict(),
+                    "ema": ema.state_dict(),
+                    "opt": opt.state_dict(),
+                    "args": args
+                }
             checkpoint_path = f"{checkpoint_dir}/{train_steps:07d}.pt"
             torch.save(checkpoint, checkpoint_path)
             logger.info(f"Saved checkpoint to {checkpoint_path}")
@@ -283,8 +293,9 @@ if __name__ == "__main__":
     parser.add_argument("--epochs", type=int, default=1000)
     parser.add_argument("--batch-size", type=int, default=256, help="batch size should >= 6*2")
     parser.add_argument("--num-workers", type=int, default=4)
-    parser.add_argument("--log-every", type=int, default=100)
     parser.add_argument("--ckpt-every", type=int, default=10_000)
+    parser.add_argument("--only-ema", type=bool, default=True)
+    parser.add_argument("--log-every", type=int, default=100)
 
     args = parser.parse_args()
     main(args)

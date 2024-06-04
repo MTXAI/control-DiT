@@ -35,7 +35,7 @@ dataset = CustomDataset(features_dir=features_dir, labels_dir=labels_dir, condit
 
 loader = DataLoader(
     dataset,
-    batch_size=1,
+    batch_size=2,
     shuffle=False,
     num_workers=num_workers,
     pin_memory=True,
@@ -51,9 +51,13 @@ def main():
         x = x.to(Device)
         y = y.to(Device)
         z = z.to(Device)
+        print(idx, x.shape, y.shape, z.shape)
+
         x = x.squeeze(dim=1)
         y = y.squeeze(dim=1)
         z = z.squeeze(dim=1)
+        if x.shape[0] != batch_size:
+            break
         if idx > 0:
             break
 

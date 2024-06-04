@@ -203,9 +203,12 @@ def main(args):
             x = x.to(device)
             y = y.to(device)
             z = z.to(device)
-            x = x[0].squeeze(dim=1)
-            y = y[0].squeeze(dim=1).long()
-            z = z[0].squeeze(dim=1)
+            x = x.squeeze(dim=1)
+            y = y.squeeze(dim=1).long()
+            z = z.squeeze(dim=1)
+            if x.shape[0] != batch_size:
+                logger.warn("Batch size mismatch, quit!")
+                break
             t = torch.randint(0, diffusion.num_timesteps, (x.shape[0],), device=device)
             model_kwargs = dict(y=y, z=z)
             loss_dict = diffusion.training_losses(model, x, t, model_kwargs)

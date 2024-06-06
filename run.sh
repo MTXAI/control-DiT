@@ -2,19 +2,20 @@
 
 set -x
 
-image_size=$1
-epochs=$2
-batch_size=$3
-num_workers=$4
-model_name=$5
-logs=$6
-ckpts=$7
-ema=$8
+out_dir=$1
+image_size=$2
+epochs=$3
+batch_size=$4
+num_workers=$5
+model_name=$6
+logs=$7
+ckpts=$8
+ema=$9
 
 code=$GEMINI_CODE/code
 
 input=$GEMINI_DATA_IN1/imagenette_processed_train
-output=$GEMINI_DATA_OUT/$9
+output=$GEMINI_DATA_OUT/$out_dir
 model_type=DiT-XL/2
 dit_model=$GEMINI_PRETRAIN/checkpoints/${model_name}
 

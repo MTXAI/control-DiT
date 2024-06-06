@@ -14,7 +14,7 @@ ema=$8
 code=$GEMINI_CODE/code
 
 input=$GEMINI_DATA_IN1/imagenette_processed_train
-output=$GEMINI_DATA_OUT/control-dit_train_baseline-v4
+output=$GEMINI_DATA_OUT/$9
 model_type=DiT-XL/2
 dit_model=$GEMINI_PRETRAIN/checkpoints/${model_name}
 

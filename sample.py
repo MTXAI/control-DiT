@@ -8,6 +8,7 @@
 Sample new images from a pre-trained DiT.
 """
 import os
+from copy import deepcopy
 
 import numpy as np
 import torch
@@ -26,6 +27,10 @@ import argparse
 
 
 imgTools = ImageTools()
+
+
+def sample_forward(model):
+    return model.forward_with_cfg
 
 
 def load_dit_model(model_ckpt):
@@ -57,20 +62,19 @@ def main(args):
     # Auto-download a pre-trained model or load a custom DiT checkpoint from train.py:
     dit_ckpt_path = args.dit_ckpt
     dit_state_dict = load_dit_model(dit_ckpt_path)
-    dit_model.load_state_dict(dit_state_dict)
+    dit_model.load_state_dict(dit_state_dict, strict=False)
     dit_model.eval()  # important!
 
     control_dit_model = ControlDiT_models[args.model_type](
-        dit=dit_model,
         input_size=latent_size,
         num_classes=args.num_classes
     ).to(device)
     # Auto-download a pre-trained model or load a custom DiT checkpoint from train.py:
-    control_dit_ckpt_path = args.control_dit_ckpt
-    control_dit_state_dict = load_dit_model(control_dit_ckpt_path)
-    control_dit_model.load_state_dict(control_dit_state_dict)
+    # control_dit_ckpt_path = args.control_dit_ckpt
+    # control_dit_state_dict = load_dit_model(control_dit_ckpt_path)
+    # control_dit_model.load_state_dict(control_dit_state_dict)
     control_dit_model.eval()  # important!
-
+    setattr(control_dit_model ,"dit", dit_model)
     diffusion = create_diffusion(str(args.num_sampling_steps))
 
     midas, transform = imgTools.load_deep_model(model_type="DPT_Large", cuda=False,
@@ -79,6 +83,7 @@ def main(args):
 
     # Labels to condition the model with (feel free to change):
     class_labels = [0]
+    # class_labels = [207]
 
     # Create sampling noise:
     n = len(class_labels)
@@ -93,30 +98,52 @@ def main(args):
     ix = imgTools.read(args.test_image)
     ix = imgTools.resize(ix, (args.image_size, args.image_size))
     z = imgTools.to_deep(ix, False, midas, transform)
-    plt.imshow(z)
-    ix = imgTools.cv2_to_pil_tensor(ix)
-    z = torch.from_numpy(z).expand_as(ix[0])
-    z = z.expand_as(ix)
+    z = imgTools.deep_2_cv2(z)
+    z = imgTools.resize(z, (args.image_size, args.image_size))
+    imgTools.write(z, args.output + '_deep.png')
+
+    z = imgTools.cv2_to_pil_tensor(z)
+    # z = torch.from_numpy(z).expand_as(ix[0])
+    # z = z.expand_as(ix)
     z = z.detach().cpu().numpy()
-    z = torch.tensor([z], device=device)
+    z = torch.tensor([z], device=device).to(torch.float)
+    print(z.shape)
     with torch.no_grad():
         # Map input images to latent space + normalize latents:
         z = vae.encode(z).latent_dist.sample().mul_(0.18215)
-    model_kwargs = dict(y=y, z=z, cfg_scale=args.cfg_scale)
-    # model_kwargs = dict(y=y, cfg_scale=args.cfg_scale)
+    print(z.shape)
 
-    # Sample images:
-    samples = diffusion.p_sample_loop(
-        control_dit_model.forward_with_cfg, x.shape, x, clip_denoised=False, model_kwargs=model_kwargs, progress=True, device=device
-    )
+    z = torch.cat([z, z], 0)
+    print(z.shape)
+    #
+    # x = z+x
+    # model_kwargs = dict(y=y, z=z, cfg_scale=args.cfg_scale)
+    model_kwargs = dict(y=y, cfg_scale=args.cfg_scale)
+
+    # # Sample images:
     # samples = diffusion.p_sample_loop(
-    #     dit_model.forward_with_cfg, x.shape, x, clip_denoised=False, model_kwargs=model_kwargs, progress=True, device=device
+    #     control_dit_model.dit.forward_with_cfg, x.shape, x, clip_denoised=False, model_kwargs=model_kwargs, progress=True, device=device
     # )
-    samples, _ = samples.chunk(2, dim=0)  # Remove null class samples
-    samples = vae.decode(samples / 0.18215).sample
+    # # samples = diffusion.p_sample_loop(
+    # #     dit_model.forward_with_cfg, x.shape, x, clip_denoised=False, model_kwargs=model_kwargs, progress=True, device=device
+    # # )
+    # samples, _ = samples.chunk(2, dim=0)  # Remove null class samples
+    # samples = vae.decode(samples / 0.18215).sample
+    #
+    # # Save and display images:
+    # save_image(samples, args.output + '_result.png', nrow=4, normalize=True, value_range=(-1, 1))
+    ps_origin = []
+    ps = []
+    for param in dit_model.parameters():
+        print(type(param), param.shape)
+        ps_origin.append(param)
+    print("=====")
+    for param in control_dit_model.dit.parameters():
+        print(type(param), param.shape)
+        ps.append(param)
+    for i in range(len(ps_origin)):
+        print((ps_origin[i] == ps[i]).all(), (ps_origin[i] == ps_origin[i]).all())
 
-    # Save and display images:
-    save_image(samples, "sample.png", nrow=4, normalize=True, value_range=(-1, 1))
 
 
 if __name__ == "__main__":
@@ -134,5 +161,6 @@ if __name__ == "__main__":
     parser.add_argument("--deep-model-source", type=str, default="local")
     parser.add_argument("--vae-model", type=str, default="stabilityai/sd-vae-ft-ema")
     parser.add_argument("--test-image", type=str, default=None)
+    parser.add_argument("--output", type=str, default=None)
     args = parser.parse_args()
     main(args)

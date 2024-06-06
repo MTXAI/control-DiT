@@ -242,10 +242,12 @@ def main(args):
             if train_steps % ckpt_every == 0 and train_steps > 0:
                 if accelerator.is_main_process:
                     checkpoint = {
+                        "epoch": epoch,
                         "ema": ema.state_dict(),
                     }
                     if not only_ema:
                         checkpoint = {
+                            "epoch": epoch,
                             "model": model.state_dict(),
                             "ema": ema.state_dict(),
                             "opt": opt.state_dict(),

@@ -79,7 +79,6 @@ class ControlDiT(nn.Module):
 
     def __init__(
             self,
-            dit: DiT = None,
             input_size=32,
             patch_size=2,
             in_channels=4,
@@ -92,7 +91,6 @@ class ControlDiT(nn.Module):
             learn_sigma=True,
     ):
         super().__init__()
-        self.dit = dit
         self.learn_sigma = learn_sigma
         self.in_channels = in_channels
         self.out_channels = in_channels * 2 if learn_sigma else in_channels
@@ -162,14 +160,14 @@ class ControlDiT(nn.Module):
 
         return ckpt_forward
 
-    def dit_forward(self, x, t, y):
-        x = self.dit.x_embedder(x) + self.dit.pos_embed
-        t = self.dit.t_embedder(t)  # (N, D)
-        y = self.dit.y_embedder(y, self.training)  # (N, D)
+    def dit_forward(self, x, t, y, dit):
+        x = dit.x_embedder(x) + dit.pos_embed
+        t = dit.t_embedder(t)  # (N, D)
+        y = dit.y_embedder(y, self.training)  # (N, D)
         c = t + y  # (N, D)
         return x, c
 
-    def forward(self, x, t, y, z):
+    def forward(self, x, t, y, z, dit):
         """
         Forward pass of ControlDiT.
         x: (N, C, H, W) feature with noise ,tensor of spatial inputs (images or latent representations of images)
@@ -177,11 +175,11 @@ class ControlDiT(nn.Module):
         y: (N,) tensor of class labels
         z: (N, C, H, W) z = origin control condition z + feature with noise x
         """
-        x, c = self.dit_forward(x, t, y)
+        x, c = self.dit_forward(x, t, y, dit)
         z = self.z_embedder(z) + self.pos_embed  # (N, T, D), where T = H * W / patch_size ** 2
         z = operator_add(x, z)
         for i in range(len(self.blocks)):
-            dit_block = self.dit.blocks[i]
+            dit_block = dit.blocks[i]
             block = self.blocks[i]
             x = torch.utils.checkpoint.checkpoint(self.ckpt_wrapper(dit_block), x, c)  # (N, T, D)
             z = torch.utils.checkpoint.checkpoint(self.ckpt_wrapper(block), z, c)  # (N, T, D)
@@ -190,14 +188,14 @@ class ControlDiT(nn.Module):
         z = self.unpatchify(z)  # (N, out_channels, H, W)
         return z
 
-    def forward_with_cfg(self, x, t, y, z, cfg_scale):
+    def forward_with_cfg(self, x, t, y, z, dit, cfg_scale):
         """
         Forward pass of ControlDiT, but also batches the unconditional forward pass for classifier-free guidance.
         """
         # https://github.com/openai/glide-text2im/blob/main/notebooks/text2im.ipynb
         half = x[: len(x) // 2]
         combined = torch.cat([half, half], dim=0)
-        model_out = self.forward(combined, t, y, z)
+        model_out = self.forward(combined, t, y, z, dit)
         # For exact reproducibility reasons, we apply classifier-free guidance on only
         # three channels by default. The standard approach to cfg applies it to all channels.
         # This can be done by uncommenting the following line and commenting-out the line following that.

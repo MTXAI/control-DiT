@@ -165,11 +165,11 @@ def main(args):
     ).to(device)
     state_dict = load_dit_model(dit_model_path)
     dit_model.load_state_dict(state_dict)
+    dit_model.requires_grad_(False)
     dit_model.eval()
 
     # Create model:
     model = ControlDiT_models[model_type](
-        dit=dit_model,
         input_size=latent_size,
         num_classes=num_classes
     )
@@ -210,7 +210,7 @@ def main(args):
             y = y.squeeze(dim=1)
             z = z.squeeze(dim=1)
             t = torch.randint(0, diffusion.num_timesteps, (x.shape[0],), device=device)
-            model_kwargs = dict(y=y, z=z)
+            model_kwargs = dict(y=y, z=z, dit=dit_model)
             loss_dict = diffusion.training_losses(model, x, t, model_kwargs)
             loss = loss_dict["loss"].mean()
             opt.zero_grad()

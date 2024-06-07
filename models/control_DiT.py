@@ -98,10 +98,6 @@ class ControlDiT(nn.Module):
         self.num_heads = num_heads
 
         self.z_embedder = PatchEmbed(input_size, patch_size, in_channels, hidden_size, bias=True)
-        num_patches = self.z_embedder.num_patches
-        # Will use fixed sin-cos embedding:
-        self.pos_embed = nn.Parameter(torch.zeros(1, num_patches, hidden_size), requires_grad=False)
-
         self.blocks = nn.ModuleList([
             ControlDiTBlock(hidden_size, num_heads, mlp_ratio=mlp_ratio) for _ in range(depth)
         ])
@@ -117,10 +113,6 @@ class ControlDiT(nn.Module):
                     nn.init.constant_(module.bias, 0)
 
         self.apply(_basic_init)
-
-        # Initialize (and freeze) pos_embed by sin-cos embedding:
-        pos_embed = get_2d_sincos_pos_embed(self.pos_embed.shape[-1], int(self.z_embedder.num_patches ** 0.5))
-        self.pos_embed.data.copy_(torch.from_numpy(pos_embed).float().unsqueeze(0))
 
         # Initialize patch_embed like nn.Linear (instead of nn.Conv2d):
         w = self.z_embedder.proj.weight.data
@@ -160,7 +152,7 @@ class ControlDiT(nn.Module):
 
         return ckpt_forward
 
-    def dit_forward(self, x, t, y, dit):
+    def dit_embedding(self, x, t, y, dit):
         x = dit.x_embedder(x) + dit.pos_embed
         t = dit.t_embedder(t)  # (N, D)
         y = dit.y_embedder(y, self.training)  # (N, D)
@@ -175,8 +167,8 @@ class ControlDiT(nn.Module):
         y: (N,) tensor of class labels
         z: (N, C, H, W) z = origin control condition z + feature with noise x
         """
-        x, c = self.dit_forward(x, t, y, dit)
-        z = self.z_embedder(z) + self.pos_embed  # (N, T, D), where T = H * W / patch_size ** 2
+        x, c = self.dit_embedding(x, t, y, dit)
+        z = self.z_embedder(z) + dit.pos_embed  # (N, T, D), where T = H * W / patch_size ** 2
         z = operator_add(x, z)
         for i in range(len(self.blocks)):
             dit_block = dit.blocks[i]

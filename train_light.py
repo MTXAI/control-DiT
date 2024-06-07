@@ -11,6 +11,7 @@ import torch
 
 from models.DiT import DiT_models
 from models.control_DiT import ControlDiT_models, operator_add
+from train import prepare, init_logger, load_dit_model, load_model, requires_grad, update_ema
 from utils.dataset import CustomDataset
 
 # the first flag below was False when we tested this script but True makes A100 training a lot faster:
@@ -29,74 +30,6 @@ import os
 from accelerate import Accelerator
 
 from diffusion import create_diffusion
-from diffusers.models import AutoencoderKL
-
-logger = logging.Logger('')
-
-
-#################################################################################
-#                             Training Helper Functions                         #
-#################################################################################
-
-@torch.no_grad()
-def update_ema(ema_model, model, decay=0.9999):
-    """
-    Step the EMA model towards the current model.
-    """
-    ema_params = OrderedDict(ema_model.named_parameters())
-    model_params = OrderedDict(model.named_parameters())
-
-    for name, param in model_params.items():
-        name = name.replace("module.", "")
-        # TODO: Consider applying only to params that require_grad to avoid small numerical changes of pos_embed
-        ema_params[name].mul_(decay).add_(param.data, alpha=1 - decay)
-
-
-def requires_grad(model, flag=True):
-    """
-    Set requires_grad flag for all parameters in a model.
-    """
-    for p in model.parameters():
-        p.requires_grad = flag
-
-
-def init_logger(logging_dir):
-    """
-    Create a logger that writes to a log file and stdout.
-    """
-    logging.basicConfig(
-        level=logging.INFO,
-        format='[\033[34m%(asctime)s\033[0m] %(message)s',
-        datefmt='%Y-%m-%d %H:%M:%S',
-        handlers=[logging.StreamHandler(), logging.FileHandler(f"{logging_dir}/log.txt")]
-    )
-    return logging.getLogger(__name__)
-
-
-def prepare(output, model_type):
-    os.makedirs(output, exist_ok=True)  # Make results folder (holds all experiment subfolders)
-    experiment_index = len(glob(f"{output}/*"))
-    model_string_name = model_type.replace("/", "-")  # e.g., DiT-XL/2 --> DiT-XL-2 (for naming folders)
-    experiment_dir = f"{output}/{experiment_index:03d}-{model_string_name}"  # Create an experiment folder
-    checkpoint_dir = f"{experiment_dir}/checkpoints"  # Stores saved model checkpoints
-    os.makedirs(checkpoint_dir, exist_ok=True)
-    return experiment_dir, checkpoint_dir
-
-
-def load_dit_model(model_ckpt):
-    assert os.path.isfile(model_ckpt), f'Could not find DiT checkpoint at {model_ckpt}'
-    checkpoint = torch.load(model_ckpt, map_location=lambda storage, loc: storage)
-    if "ema" in checkpoint:  # supports checkpoints from train.py
-        checkpoint = checkpoint["ema"]
-    return checkpoint
-
-
-def load_model(model_ckpt):
-    if model_ckpt is None or model_ckpt == "" or model_ckpt == 'None':
-        return None
-    assert os.path.isfile(model_ckpt), f'Could not find Model checkpoint at {model_ckpt}'
-    checkpoint = torch.load(model_ckpt, map_location=lambda storage, loc: storage)
-    return checkpoint
 
 
 #################################################################################
@@ -175,20 +108,20 @@ def main(args):
     latent_size = image_size // 8
 
     # Load dit model
-    dit_model = DiT_models[model_type](
+    model = DiT_models[model_type](
         input_size=latent_size,
         num_classes=num_classes,
     ).to(device)
     state_dict = load_dit_model(dit_model_path)
-    dit_model.load_state_dict(state_dict)
-    dit_model.requires_grad_(False)
-    dit_model.eval()
+    model.load_state_dict(state_dict)
+    # dit_model.requires_grad_(False)
+    # dit_model.eval()
 
     # Create model:
-    model = ControlDiT_models[model_type](
-        input_size=latent_size,
-        num_classes=num_classes
-    ).to(device)
+    # model = ControlDiT_models[model_type](
+    #     input_size=latent_size,
+    #     num_classes=num_classes
+    # ).to(device)
     model_dict = load_model(model_ckpt)
     if model_ckpt != '':
         model.load_state_dict(model_dict['model'], strict=False)
@@ -231,13 +164,13 @@ def main(args):
         for x, y, z in loader:
             x = x.to(device)
             y = y.to(device)
-            z = z.to(device)
+            # z = z.to(device)
             x = x.squeeze(dim=1)
             y = y.squeeze(dim=1).long()
             y = y.squeeze(dim=1)
-            z = z.squeeze(dim=1)
+            # z = z.squeeze(dim=1)
             t = torch.randint(0, diffusion.num_timesteps, (x.shape[0],), device=device)
-            model_kwargs = dict(y=y, z=z, dit=dit_model)
+            model_kwargs = dict(y=y)
             loss_dict = diffusion.training_losses(model, x, t, model_kwargs)
             loss = loss_dict["loss"].mean()
             opt.zero_grad()

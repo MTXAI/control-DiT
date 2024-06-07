@@ -1,17 +1,19 @@
 #!/usr/bin/env bash
 
 # build source code
-rm -rf output/code
-rm -rf output/code.tar.gz
-mkdir -p output/code
+#rm -rf output/code
+#rm -rf output/code.tar.gz
+ver=code-${1}
+output=output/$ver
+mkdir -p $output
 
-cp ./*.py output/code
-cp ./*.sh output/code
+cp ./*.py $output
+cp ./*.sh $output
 
-cp -r ./diffusion output/code
-cp -r ./models output/code
-cp -r ./train_options output/code
-cp -r ./utils output/code
+cp -r ./diffusion $output
+cp -r ./models $output
+cp -r ./train_options $output
+cp -r ./utils $output
 
 cd output/
-tar -zcvf code.tar.gz ./code/*
+tar -zcvf ${ver}.tar.gz ./${ver}/*

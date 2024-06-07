@@ -718,8 +718,6 @@ class GaussianDiffusion:
         :param model: the model to evaluate loss on.
         :param x_start: the [N x C x ...] tensor of inputs.
         :param t: a batch of timestep indices.
-        :param y: the label tensor.
-        :param z: the [N x C x ...] tensor of inputs.
         :param model_kwargs: if not None, a dict of extra keyword arguments to
             pass to the model. This can be used for conditioning.
         :param noise: if specified, the specific Gaussian noise to try to remove.
@@ -734,7 +732,6 @@ class GaussianDiffusion:
 
         terms = {}
 
-        # loss type is mse
         if self.loss_type == LossType.KL or self.loss_type == LossType.RESCALED_KL:
             terms["loss"] = self._vb_terms_bpd(
                 model=model,

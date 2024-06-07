@@ -10,7 +10,10 @@ num_workers=$5
 model_name=$6
 logs=$7
 ckpts=$8
-ema=$9
+lr=$9
+decay=${10}
+model_ckpt=${11}
+ema=${12}
 
 code=$GEMINI_CODE/code
 
@@ -24,4 +27,4 @@ time accelerate launch $code/train.py --input $input --output $output \
   --model-type $model_type --dit-model-path $dit_model \
   --image-size $image_size --epochs $epochs --batch-size $batch_size \
   --num-workers $num_workers --log-every $logs --ckpt-every $ckpts \
-  $ema
+  --lr $lr --decay $decay --model-ckpt $model_ckpt $ema

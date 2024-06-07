@@ -91,6 +91,14 @@ def load_dit_model(model_ckpt):
     return checkpoint
 
 
+def load_model(model_ckpt):
+    if model_ckpt is None or model_ckpt == "":
+        return None
+    assert os.path.isfile(model_ckpt), f'Could not find Model checkpoint at {model_ckpt}'
+    checkpoint = torch.load(model_ckpt, map_location=lambda storage, loc: storage)
+    return checkpoint
+
+
 #################################################################################
 #                                  Training Loop                                #
 #################################################################################
@@ -108,9 +116,12 @@ def main(args):
     # Setup data:
     model_type = args.model_type
     dit_model_path = args.dit_model_path
+    model_ckpt = args.model_ckpt
     image_size = args.image_size
     num_classes = args.num_classes
     epochs = args.epochs
+    lr = args.lr
+    decay = args.decay
     batch_size = int(args.batch_size // accelerator.num_processes)
     num_workers = args.num_workers
     ckpt_every = args.ckpt_every
@@ -141,10 +152,13 @@ def main(args):
                     f"\n\t - features_dir: {features_dir}" +
                     f"\n\t - labels_dir: {labels_dir}" +
                     f"\n\t - conditions_dir: {conditions_dir}" +
-                    f"\n\t - dit_model_path: {dit_model_path}")
+                    f"\n\t - dit_model_path: {dit_model_path}" +
+                    f"\n\t - model_ckpt: {model_ckpt}")
         logger.info(f"Train options: " +
                     f"\n\t - model_type: {model_type}" +
                     f"\n\t - epochs: {epochs}" +
+                    f"\n\t - lr: {lr}" +
+                    f"\n\t - decay: {decay}" +
                     f"\n\t - batch_size: {batch_size}" +
                     f"\n\t - num_workers: {num_workers}" +
                     f"\n\t - ckpt_every: {ckpt_every}" +
@@ -173,6 +187,10 @@ def main(args):
         input_size=latent_size,
         num_classes=num_classes
     )
+    model_dict = load_model(model_ckpt)
+    if model_ckpt != '':
+        model.load_state_dict(model_dict['model'])
+
     # Note that parameter initialization is done within the DiT constructor
     model = model.to(device)
     ema = deepcopy(model).to(device)  # Create an EMA of the model for use after training
@@ -182,7 +200,9 @@ def main(args):
         logger.info(f"DiT Parameters: {sum(p.numel() for p in model.parameters()):,}")
 
     # Setup optimizer (we used default Adam betas=(0.9, 0.999) and a constant learning rate of 1e-4 in our paper):
-    opt = torch.optim.AdamW(model.parameters(), lr=1e-4, weight_decay=0)
+    opt = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=decay)
+    if model_ckpt != '':
+        opt.load_state_dict(model_dict['opt'])
 
     # Prepare models for training:
     update_ema(ema, model, decay=0)  # Ensure EMA is initialized with synced weights
@@ -198,7 +218,13 @@ def main(args):
 
     if accelerator.is_main_process:
         logger.info(f"Training for {epochs} epochs...")
-    for epoch in range(epochs):
+
+    first_epoch = 0
+    if model_ckpt != '':
+        first_epoch = model_dict['epoch'] + 1
+
+    logger.info(f"First epoch is {first_epoch}")
+    for epoch in range(first_epoch, epochs):
         if accelerator.is_main_process:
             logger.info(f"Beginning epoch {epoch}...")
         for x, y, z in loader:
@@ -288,11 +314,15 @@ if __name__ == "__main__":
     parser.add_argument("--model-type", type=str, choices=list(DiT_models.keys()), default="DiT-XL/2")
     parser.add_argument("--dit-model-path", type=str, default="/gemini/pretrain/checkpoints/DiT-XL-2-256x256.pt",
                         help="dit model path")
+    parser.add_argument("--model-ckpt", type=str,
+                        default="/gemini/output/control-dit_train_baseline-opt-v1/000-DiT-XL-2/checkpoints/0002500.pt")
 
     parser.add_argument("--image-size", type=int, choices=[256, 512], default=256)
     parser.add_argument("--num-classes", type=int, default=1000)
 
     parser.add_argument("--epochs", type=int, default=500)
+    parser.add_argument("--lr", type=float, choices=[1e-1, 1e-2, 1e-3, 3e-4, 1e-4], default=3e-4)
+    parser.add_argument("--decay", type=float, choices=[0, 1e-1, 1e-2, 1e-3], default=1e-1)
     parser.add_argument("--batch-size", type=int, default=256, help="batch size should >= 6*2")
     parser.add_argument("--num-workers", type=int, default=4)
     parser.add_argument("--ckpt-every", type=int, default=10_000)

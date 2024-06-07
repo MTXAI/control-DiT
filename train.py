@@ -189,7 +189,7 @@ def main(args):
     )
     model_dict = load_model(model_ckpt)
     if model_ckpt != '':
-        model.load_state_dict(model_dict['model'])
+        model.load_state_dict(model_dict['model'], strict=False)
 
     # Note that parameter initialization is done within the DiT constructor
     model = model.to(device)

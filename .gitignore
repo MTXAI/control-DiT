@@ -1,8 +1,12 @@
 *.pt
 *.ckpt
+*.bin
+*.safetensors
+
 output/*
-.DS_Store
 datasets/
+
+.DS_Store
 .idea
 
 # Byte-compiled / optimized / DLL files

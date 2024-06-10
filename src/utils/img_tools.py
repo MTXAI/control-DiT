@@ -82,11 +82,8 @@ def cv2_to_pil(img):
 
 def tensor_to_cv2(tensor):
     # CHW to HWC
-    array = tensor.numpy()  # to numpy
-    array = array * 255 / array.max()  # normalize -> [0,255]
-    mat = np.uint8(array)  # float32-->uint8
-    mat = mat.transpose(1, 2, 0)
-    return cv.cvtColor(mat, cv.COLOR_BGR2RGB)
+    tensor = tensor.permute(1, 2, 0)
+    return tensor.cpu().numpy()
 
 
 def tensor_to_pil(tensor):

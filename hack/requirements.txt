@@ -1,0 +1,7 @@
+timm
+diffusers
+accelerate
+pycocotools
+opencv-python
+tqdm
+jupyter

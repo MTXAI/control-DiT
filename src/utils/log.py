@@ -1,0 +1,16 @@
+import logging
+
+logger = logging.Logger('')
+
+
+def init_logger(logging_dir):
+    """
+    Create a logger that writes to a log file and stdout.
+    """
+    logging.basicConfig(
+        level=logging.INFO,
+        format='[\033[34m%(asctime)s\033[0m] %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S',
+        handlers=[logging.StreamHandler(), logging.FileHandler(f"{logging_dir}/log.txt")]
+    )
+    return logging.getLogger(__name__)

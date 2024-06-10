@@ -85,7 +85,7 @@ def main(args):
 
         if not os.path.exists(labels_path):
             print(f'Class: {y}-{index_key}-{index[index_key]}')
-            label = np.asarray([[index[index_key][0]]], dtype=np.int16)
+            label = np.asarray([[index[index_key][0]]], dtype=np.int16)  # (1, 1)
             np.save(labels_path, label)
             print(f'label filepath: {labels_path}, shape: {label.shape}')
         else:
@@ -97,13 +97,13 @@ def main(args):
                 z = cv2_to_depth(tensor_to_cv2(x[0]), midas, transform, device)
                 z = z.unsqueeze(0).to(device)
                 condition = depth_to_map(z, latent_size, 1, False)
-                condition = condition.detach().cpu().numpy()
+                condition = condition.detach().cpu().numpy()  # (1, 1, 32, 32)
                 np.save(conditions_path, condition)
                 print(f'condition filepath: {conditions_path}, shape: {condition.shape}')
 
                 # Map input images to latent space + normalize latents:
                 feature = vae.encode(x).latent_dist.sample().mul_(0.18215)
-                feature = feature.detach().cpu().numpy()
+                feature = feature.detach().cpu().numpy()  # (1, 4, 32, 32)
                 np.save(features_path, feature)
                 print(f'feature filepath: {features_path}, shape: {feature.shape}')
         else:

@@ -92,10 +92,12 @@ def main(args):
     ).to(device)
 
     if model_ckpt != '':
-        model_dict = try_load_model(model_ckpt)
+        logger.info(f"Loading model from {args.model_ckpt}")
+        model_dict = load_model(model_ckpt)
         model.load_state_dict(model_dict['model'])
     elif args.dit_model_path != '':
-        state_dict = load_dit_model(args.dit_model_path)
+        logger.info(f"Loading dit model from {args.dit_model_path}")
+        state_dict = load_pretrained_dit_model(args.dit_model_path)
         model.load_state_dict(state_dict, strict=False)
 
     # 5. Create diffusion pipeline and Setup optimizer

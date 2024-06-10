@@ -24,18 +24,21 @@ def load_depth_model(model_type="DPT_Large", model_repo_or_path="intel-isl/MiDaS
     return midas, transform
 
 
-def load_dit_model(model_ckpt):
+def load_pretrained_dit_model(model_ckpt):
     assert os.path.isfile(model_ckpt), f'Could not find DiT checkpoint at {model_ckpt}'
     checkpoint = torch.load(model_ckpt, map_location=lambda storage, loc: storage)
     if "ema" in checkpoint:  # supports checkpoints from train.py
         checkpoint = checkpoint["ema"]
+    checkpoint.pop('x_embedder.proj.weight')
+    checkpoint.pop('final_layer.linear.weight')
+    checkpoint.pop('final_layer.linear.bias')
     return checkpoint
 
 
 none_model = 'None'
 
 
-def try_load_model(model_ckpt=none_model):
+def load_model(model_ckpt=none_model):
     if model_ckpt is None or model_ckpt == "" or model_ckpt == none_model:
         return None
     assert os.path.isfile(model_ckpt), f'Could not find Model checkpoint at {model_ckpt}'

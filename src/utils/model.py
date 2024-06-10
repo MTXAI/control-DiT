@@ -29,9 +29,6 @@ def load_pretrained_dit_model(model_ckpt):
     checkpoint = torch.load(model_ckpt, map_location=lambda storage, loc: storage)
     if "ema" in checkpoint:  # supports checkpoints from train.py
         checkpoint = checkpoint["ema"]
-    checkpoint.pop('x_embedder.proj.weight')
-    checkpoint.pop('final_layer.linear.weight')
-    checkpoint.pop('final_layer.linear.bias')
     return checkpoint
 
 

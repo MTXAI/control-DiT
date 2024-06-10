@@ -5,6 +5,7 @@
 
 output/*
 datasets/
+chores/
 
 .DS_Store
 .idea

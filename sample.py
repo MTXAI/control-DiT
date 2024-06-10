@@ -7,7 +7,7 @@ from torchvision.utils import save_image
 from src.diffusion import create_diffusion
 from src.models import create_dit_model
 from src.utils.img_tools import *
-from src.utils.model import load_model, load_depth_model
+from src.utils.model import load_model, load_depth_model, load_pretrained_dit_model
 
 
 def main(args):
@@ -29,9 +29,14 @@ def main(args):
         num_classes=args.num_classes,
         in_channels=in_channels
     ).to(device)
-    # Auto-download a pre-trained model or load a custom DiT checkpoint from train.py:
-    model_dict = load_model(args.model_ckpt)
-    model.load_state_dict(model_dict['ema'])
+    if args.model_ckpt != '':
+        logger.info(f"Loading model from {args.model_ckpt}")
+        model_dict = load_model(args.model_ckpt)
+        model.load_state_dict(model_dict['ema'])
+    elif args.dit_model_ckpt != '':
+        logger.info(f"Loading dit model from {args.dit_model_ckpt}")
+        state_dict = load_pretrained_dit_model(args.dit_model_ckpt)
+        model.load_state_dict(state_dict, strict=False)
     model.eval()  # important!
 
     diffusion = create_diffusion(str(args.num_sampling_steps))
@@ -76,7 +81,9 @@ if __name__ == "__main__":
     parser.add_argument("--cfg-scale", type=float, default=4.0)
     parser.add_argument("--num-sampling-steps", type=int, default=1000)
     parser.add_argument("--seed", type=int, default=0)
-    parser.add_argument("--model-ckpt", type=str, default=None)
+    parser.add_argument("--dit-model-ckpt", type=str, default="/gemini/pretrain/checkpoints/DiT-XL-2-256x256.pt",
+                        help="dit model path")
+    parser.add_argument("--model-ckpt", type=str, default="")
     parser.add_argument("--deep-model", type=str, default="intel-isl/MiDaS")
     parser.add_argument("--deep-model-source", type=str, default="github")
     parser.add_argument("--vae-model", type=str, default="stabilityai/sd-vae-ft-mse")

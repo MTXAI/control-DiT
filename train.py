@@ -65,7 +65,7 @@ def main(args):
                     f"\n\t - features_dir: {features_dir}" +
                     f"\n\t - labels_dir: {labels_dir}" +
                     f"\n\t - conditions_dir: {conditions_dir}" +
-                    f"\n\t - dit_model_path: {args.dit_model_path}" +
+                    f"\n\t - dit_model_ckpt: {args.dit_model_ckpt}" +
                     f"\n\t - model_ckpt: {model_ckpt}")
         logger.info(f"Train options: " +
                     f"\n\t - model_type: {args.model_type}" +
@@ -95,9 +95,13 @@ def main(args):
         logger.info(f"Loading model from {args.model_ckpt}")
         model_dict = load_model(model_ckpt)
         model.load_state_dict(model_dict['model'])
-    elif args.dit_model_path != '':
-        logger.info(f"Loading dit model from {args.dit_model_path}")
-        state_dict = load_pretrained_dit_model(args.dit_model_path)
+    elif args.dit_model_ckpt != '':
+        logger.info(f"Loading dit model from {args.dit_model_ckpt}")
+        state_dict = load_pretrained_dit_model(args.dit_model_ckpt)
+        # pop unmatched params
+        state_dict.pop('x_embedder.proj.weight')
+        state_dict.pop('final_layer.linear.weight')
+        state_dict.pop('final_layer.linear.bias')
         model.load_state_dict(state_dict, strict=False)
 
     # 5. Create diffusion pipeline and Setup optimizer
@@ -219,7 +223,7 @@ if __name__ == "__main__":
     parser.add_argument("--input", type=str, default="/gemini/data-1/imagenette_processed_train", help="input")
     parser.add_argument("--output", type=str, default="/gemini/output/control-dit_train_baseline-v4", help="output")
     parser.add_argument("--model-type", type=str, default="DiT-XL/2")
-    parser.add_argument("--dit-model-path", type=str, default="/gemini/pretrain/checkpoints/DiT-XL-2-256x256.pt",
+    parser.add_argument("--dit-model-ckpt", type=str, default="/gemini/pretrain/checkpoints/DiT-XL-2-256x256.pt",
                         help="dit model path")
     parser.add_argument("--model-ckpt", type=str, default="")
 

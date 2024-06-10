@@ -23,11 +23,10 @@ def main(args):
 
     # Load model:
     latent_size = args.image_size // 8
-    in_channels = 5
     model = create_dit_model(args.model_type)(
         input_size=latent_size,
         num_classes=args.num_classes,
-        in_channels=in_channels
+        in_channels=args.in_channels
     ).to(device)
     if args.model_ckpt != '':
         logger.info(f"Loading model from {args.model_ckpt}")
@@ -77,6 +76,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--model-type", type=str, default="DiT-XL/2")
     parser.add_argument("--image-size", type=int, choices=[256, 512], default=256)
+    parser.add_argument("--in-channels", type=int, default=4)
     parser.add_argument("--num-classes", type=int, default=1000)
     parser.add_argument("--cfg-scale", type=float, default=4.0)
     parser.add_argument("--num-sampling-steps", type=int, default=1000)

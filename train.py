@@ -35,7 +35,6 @@ def main(args):
     if args.model_ckpt != '' and args.model_ckpt != none_model:
         model_ckpt = args.model_ckpt
     batch_size = int(args.batch_size // accelerator.num_processes)
-    in_channels = 5
     # 2. Setup data:
     features_dir = os.path.join(args.input, f'imagenet{args.image_size}_features')
     labels_dir = os.path.join(args.input, f'imagenet{args.image_size}_labels')
@@ -74,7 +73,7 @@ def main(args):
                     f"\n\t - decay: {args.decay}" +
                     f"\n\t - batch_size: {batch_size}" +
                     f"\n\t - latent_size: {latent_size}" +
-                    f"\n\t - in_channels: {in_channels}" +
+                    f"\n\t - in_channels: {args.in_channels}" +
                     f"\n\t - num_workers: {args.num_workers}" +
                     f"\n\t - ckpt_every: {args.ckpt_every}" +
                     f"\n\t - only_ema: {args.only_ema}" +
@@ -88,7 +87,7 @@ def main(args):
     model = create_dit_model(args.model_type)(
         input_size=latent_size,
         num_classes=args.num_classes,
-        in_channels=in_channels,
+        in_channels=args.in_channels,
     ).to(device)
 
     if model_ckpt != '':
@@ -234,6 +233,7 @@ if __name__ == "__main__":
     parser.add_argument("--lr", type=float, default=3e-4)
     parser.add_argument("--decay", type=float, default=1e-1)
     parser.add_argument("--batch-size", type=int, default=256, help="batch size should >= 6*2")
+    parser.add_argument("--in-channels", type=int, default=4)
     parser.add_argument("--num-workers", type=int, default=4)
     parser.add_argument("--ckpt-every", type=int, default=10_000)
     parser.add_argument("--only-ema", action='store_true')

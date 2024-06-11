@@ -29,11 +29,9 @@ def main(args):
         in_channels=args.in_channels
     ).to(device)
     if args.model_ckpt != '':
-        logger.info(f"Loading model from {args.model_ckpt}")
         model_dict = load_model(args.model_ckpt)
         model.load_state_dict(model_dict['ema'])
     elif args.dit_model_ckpt != '':
-        logger.info(f"Loading dit model from {args.dit_model_ckpt}")
         state_dict = load_pretrained_dit_model(args.dit_model_ckpt)
         model.load_state_dict(state_dict, strict=False)
     model.eval()  # important!
@@ -56,7 +54,7 @@ def main(args):
     z = depth_to_map(z, latent_size, 1, False)
     # Setup classifier-free guidance:
     x = torch.cat([x, z], dim=1)
-    x = torch.cat([x, x], 0)
+    x = torch.cat([x, x], dim=0)
     y_null = torch.tensor([1000], device=device)
     y = torch.cat([y, y_null], 0)
 

@@ -1,0 +1,3 @@
+from diffusers import StableDiffusionDepth2ImgPipeline
+
+StableDiffusionDepth2ImgPipeline

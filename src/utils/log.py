@@ -1,7 +1,5 @@
 import logging
 
-logger = logging.Logger('')
-
 
 def init_logger(logging_dir):
     """

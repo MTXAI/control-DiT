@@ -184,13 +184,15 @@ def main(args):
                 torch.cuda.synchronize()
                 end_time = time()
                 steps_per_sec = log_steps / (end_time - start_time)
+                datas_per_sec = log_steps*args.batch_size / (end_time - start_time)
                 # Reduce loss history over all processes:
                 avg_loss = torch.tensor(running_loss / log_steps, device=device)
                 avg_loss = avg_loss.item() / accelerator.num_processes
                 log_info(f"(step={train_steps:07d}) " +
                          f"Train Loss: {avg_loss:.4f}, " +
                          f"Last Loss: {last_loss:.4f}, " +
-                         f"Train Steps/Sec: {steps_per_sec:.2f}",
+                         f"Train Steps/Sec: {steps_per_sec:.2f}, " +
+                         f"Process data/Sec: {datas_per_sec:.2f}",
                          in_main_process=accelerator.is_main_process)
                 # Reset monitoring variables:
                 running_loss = 0

@@ -1,12 +1,18 @@
 import numpy as np
 import torch
 
-x = torch.zeros((2, 4, 32, 32))
+x = torch.zeros((1, 4, 32, 32))
 z = torch.zeros((1, 1, 32, 32))
+x = torch.cat([x, x], dim=0)
+print(x.shape, z.shape)
+
+half = x[: len(x) // 2]
+x = torch.cat([half, half], dim=0)
+print(x.shape, z.shape)
 
 if x.shape[0]==2:
-    x1 = torch.cat([x[:1], z], dim=1)
-    x2 = torch.cat([x[1:], z], dim=1)
+    x1 = torch.cat([x[0], z[0]], dim=0).unsqueeze(0)
+    x2 = torch.cat([x[1], z[0]], dim=0).unsqueeze(0)
     x = torch.cat([x1, x2], dim=0)
 else:
     x = torch.cat([x, z], dim=1)
@@ -20,6 +26,14 @@ if x.shape[0]==2:
 else:
     x = x[:, :5 - z.shape[1]]
 print(x.shape, z.shape)
+
+eps, rest = x[:, :3], x[:, 3:]
+cond_eps, uncond_eps = torch.split(eps, len(eps) // 2, dim=0)
+half_eps = uncond_eps + 4.0 * (cond_eps - uncond_eps)
+eps = torch.cat([half_eps, half_eps], dim=0)
+sample = torch.cat([eps, rest], dim=1)
+
+print(sample.shape)
 
 # N = 2
 # H = 32

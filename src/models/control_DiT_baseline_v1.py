@@ -252,7 +252,12 @@ class ControlDiT(nn.Module):
         """
 
         # cat x and z, [4, 32, 32] -> [5, 32, 32]
-        x = torch.cat([x, z], dim=1)
+        if self.learn_sigma:
+            x1 = torch.cat([x[:1], z], dim=1)
+            x2 = torch.cat([x[1:], z], dim=1)
+            x = torch.cat([x1, x2], dim=0)
+        else:
+            x = torch.cat([x, z], dim=1)
 
         x = self.x_embedder(x) + self.pos_embed  # (N, T, D), where T = H * W / patch_size ** 2
         t = self.t_embedder(t)  # (N, D)

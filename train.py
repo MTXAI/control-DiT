@@ -159,10 +159,10 @@ def main(args):
             y = y.to(device)
             z = z.to(device)
 
-            x = x.squeeze(dim=0)
-            y = y.squeeze(dim=0).long()
-            y = y.squeeze(dim=0)
-            z = z.squeeze(dim=0)
+            x = x.squeeze(dim=1)
+            y = y.squeeze(dim=1).long()
+            y = y.squeeze(dim=1)
+            z = z.squeeze(dim=1)
             # cat x and z, [4, 32, 32] -> [5, 32, 32]
             x = torch.cat([x, z], dim=1)
             t = torch.randint(0, diffusion.num_timesteps, (x.shape[0],), device=device)
@@ -188,9 +188,9 @@ def main(args):
                 avg_loss = torch.tensor(running_loss / log_steps, device=device)
                 avg_loss = avg_loss.item() / accelerator.num_processes
                 log_info(f"(step={train_steps:07d}) " +
-                         "Train Loss: {avg_loss:.4f}, " +
-                         "Last Loss: {last_loss:.4f}, " +
-                         "Train Steps/Sec: {steps_per_sec:.2f}",
+                         f"Train Loss: {avg_loss:.4f}, " +
+                         f"Last Loss: {last_loss:.4f}, " +
+                         f"Train Steps/Sec: {steps_per_sec:.2f}",
                          in_main_process=accelerator.is_main_process)
                 # Reset monitoring variables:
                 running_loss = 0

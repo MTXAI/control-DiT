@@ -52,9 +52,11 @@ def main(args):
     z = cv2_to_depth(ix, midas, transform, device)
     z = z.unsqueeze(0).to(device)
     z = depth_to_map(z, latent_size, 1, False)
+    z = z.squeeze(0)
     # Setup classifier-free guidance:
     x = torch.cat([x, z], dim=1)
     x = torch.cat([x, x], dim=0)
+
     y_null = torch.tensor([1000], device=device)
     y = torch.cat([y, y_null], 0)
 

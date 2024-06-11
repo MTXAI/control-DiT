@@ -253,11 +253,7 @@ class ControlDiT(nn.Module):
 
         # cat x and z, if learn_sigma: [N, 4, 32, 32], [N, 1, 32, 32] -> [N, 10, 32, 32]
         # cat x and z, if not learn_sigma: [N, 4, 32, 32], [N, 1, 32, 32] -> [N, 5, 32, 32]
-        if self.learn_sigma:
-            x1 = torch.cat([x[0], z[0]], dim=0).unsqueeze(0)
-            x2 = torch.cat([x[1], z[0]], dim=0).unsqueeze(0)
-            x = torch.cat([x1, x2], dim=0)
-        else:
+        if x.shape[0] == z.shape[0]:
             x = torch.cat([x, z], dim=1)
 
         x = self.x_embedder(x) + self.pos_embed  # (N, T, D), where T = H * W / patch_size ** 2
@@ -284,7 +280,10 @@ class ControlDiT(nn.Module):
         # https://github.com/openai/glide-text2im/blob/main/notebooks/text2im.ipynb
         half = x[: len(x) // 2]
         combined = torch.cat([half, half], dim=0)
-        model_out = self.forward(combined, t, y, z)
+        x1 = torch.cat([combined[0], z[0]], dim=0).unsqueeze(0)
+        x2 = torch.cat([combined[1], z[0]], dim=0).unsqueeze(0)
+        x = torch.cat([x1, x2], dim=0)
+        model_out = self.forward(x, t, y, z)
         # For exact reproducibility reasons, we apply classifier-free guidance on only
         # three channels by default. The standard approach to cfg applies it to all channels.
         # This can be done by uncommenting the following line and commenting-out the line following that.

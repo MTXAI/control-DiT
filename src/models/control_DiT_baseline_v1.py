@@ -243,13 +243,17 @@ class ControlDiT(nn.Module):
 
         return ckpt_forward
 
-    def forward(self, x, t, y):
+    def forward(self, x, t, y, z):
         """
         Forward pass of ControlDiT.
         x: (N, C, H, W) tensor of spatial inputs (images or latent representations of images)
         t: (N,) tensor of diffusion timesteps
         y: (N,) tensor of class labels
         """
+
+        # cat x and z, [4, 32, 32] -> [5, 32, 32]
+        x = torch.cat([x, z], dim=1)
+
         x = self.x_embedder(x) + self.pos_embed  # (N, T, D), where T = H * W / patch_size ** 2
         t = self.t_embedder(t)  # (N, D)
         y = self.y_embedder(y, self.training)  # (N, D)
@@ -258,16 +262,23 @@ class ControlDiT(nn.Module):
             x = torch.utils.checkpoint.checkpoint(self.ckpt_wrapper(block), x, c)  # (N, T, D)
         x = self.final_layer(x, c)  # (N, T, patch_size ** 2 * out_channels)
         x = self.unpatchify(x)  # (N, out_channels, H, W)
+
+        if self.learn_sigma:
+            x1 = x[:, :self.in_channels-z.shape[1]]
+            x2 = x[:, self.in_channels:self.in_channels*2-z.shape[1]]
+            x = torch.cat([x1, x2], dim=1)
+        else:
+            x = x[:, :self.in_channels-z.shape[1]]
         return x
 
-    def forward_with_cfg(self, x, t, y, cfg_scale):
+    def forward_with_cfg(self, x, t, y, z, cfg_scale):
         """
         Forward pass of ControlDiT, but also batches the unconditional forward pass for classifier-free guidance.
         """
         # https://github.com/openai/glide-text2im/blob/main/notebooks/text2im.ipynb
         half = x[: len(x) // 2]
         combined = torch.cat([half, half], dim=0)
-        model_out = self.forward(combined, t, y)
+        model_out = self.forward(combined, t, y, z)
         # For exact reproducibility reasons, we apply classifier-free guidance on only
         # three channels by default. The standard approach to cfg applies it to all channels.
         # This can be done by uncommenting the following line and commenting-out the line following that.
@@ -386,7 +397,7 @@ def ControlDiT_S_8(**kwargs):
     return ControlDiT(depth=12, hidden_size=384, patch_size=8, num_heads=6, **kwargs)
 
 
-ControlDiT_models = {
+ControlDiT_models_baseline_v1 = {
     'DiT-XL/2': ControlDiT_XL_2, 'DiT-XL/4': ControlDiT_XL_4, 'DiT-XL/8': ControlDiT_XL_8,
     'DiT-L/2': ControlDiT_L_2, 'DiT-L/4': ControlDiT_L_4, 'DiT-L/8': ControlDiT_L_8,
     'DiT-B/2': ControlDiT_B_2, 'DiT-B/4': ControlDiT_B_4, 'DiT-B/8': ControlDiT_B_8,

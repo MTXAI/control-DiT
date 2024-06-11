@@ -1,3 +1,7 @@
+
+
+pipe = StableDiffusionDepth2ImgPipeline
+
 import numpy as np
 import torch
 

@@ -22,6 +22,56 @@ def log_info(s, in_main_process=False):
         logger.info(s)
 
 
+def log_step_metrics(prefix,
+                     current_step,
+                     steps,
+                     start_time,
+                     loss,
+                     num_processes,
+                     device,
+                     sync_cuda=True,
+                     in_main_process=False):
+    # Measure training speed:
+    torch.cuda.synchronize()
+    end_time = time()
+    steps_per_sec = steps / (end_time - start_time)
+    datas_per_sec = steps * args.batch_size / (end_time - start_time)
+    # Reduce loss history over all processes:
+    avg_loss = torch.tensor(loss / steps, device=device)
+    avg_loss = avg_loss.item() / num_processes
+    log_info(f"[{prefix}](step={current_step:07d}) " +
+             f"Train Loss: {avg_loss:.4f}, " +
+             f"Train Steps/Sec: {steps_per_sec:.2f}, " +
+             f"Process data/Sec: {datas_per_sec:.2f}",
+             in_main_process=in_main_process)
+
+
+def save_and_clean_checkpoint(epoch, checkpoint, suffix, auto_clean_ckpt, in_main_process=False):
+    checkpoint_path = f"{checkpoint_dir}/{epoch:07d}-{suffix}.pt"
+    torch.save(checkpoint, checkpoint_path)
+    log_info(f"Saved checkpoint to {checkpoint_path}", in_main_process=in_main_process)
+
+    if auto_clean_ckpt:
+        files = os.listdir(checkpoint_dir)
+        remove_ckpt_names = []
+        for file in files:
+            items = file.split('-')
+            if len(items) != 2:
+                continue
+            old_epoch, old_suffix = items[0], items[1].replace('.pt', '')
+            if old_suffix != suffix:
+                continue
+            if epoch > int(old_epoch):
+                remove_ckpt_names.append(file)
+        if len(remove_ckpt_names) == 0:
+            print('No checkpoint to remove')
+            return
+        for file in remove_ckpt_names:
+            # 获取文件路径
+            checkpoint_path = os.path.join(checkpoint_dir, file)
+            print(f"Removed checkpoint in {checkpoint_path}")
+
+
 def prepare_output_dir(output, model_type):
     os.makedirs(output, exist_ok=True)  # Make results folder (holds all experiment subfolders)
     experiment_index = len(glob(f"{output}/*"))
@@ -80,8 +130,9 @@ def prepare_all(args) -> (Accelerator, DataLoader, str):
                  f"\n\t - vae_scale_factor: {args.vae_scale_factor}" +
                  f"\n\t - in_channels: {args.in_channels}" +
                  f"\n\t - num_workers: {args.num_workers}" +
-                 f"\n\t - ckpt_every: {args.ckpt_every}" +
-                 f"\n\t - only_ema: {args.only_ema}" +
+                 f"\n\t - ckpt_every_epoch: {args.ckpt_every_epoch}" +
+                 f"\n\t - ckpt_ema_every_epoch: {args.ckpt_ema_every_epoch}" +
+                 f"\n\t - auto_clean_ckpt: {args.auto_clean_ckpt}" +
                  f"\n\t - log_every: {args.log_every}", True)
         log_info(f"Dataset abstract: " +
                  f"\n\t - length: {len(dataset)}" +
@@ -144,9 +195,15 @@ def main(args):
 
     # Begin training
     train_steps = 0
+
     log_steps = 0
     running_loss = 0
     start_time = time()
+
+    epoch_steps = 0
+    epoch_loss = 0
+    epoch_start_time = time()
+
     first_epoch = 0
     if model_ckpt != '':
         first_epoch = model_dict['epoch'] + 1
@@ -154,6 +211,7 @@ def main(args):
              in_main_process=accelerator.is_main_process)
     for epoch in range(first_epoch, args.epochs):
         log_info(f"Beginning epoch {epoch}...", in_main_process=accelerator.is_main_process)
+
         for x, y, z in loader:
             x = x.to(device)
             y = y.to(device)
@@ -175,65 +233,67 @@ def main(args):
             update_ema(ema, model)
 
             # Log loss values:
+            train_steps += 1
             last_loss = loss.item()
+
             running_loss += last_loss
             log_steps += 1
-            train_steps += 1
+
+            epoch_loss += last_loss
+            epoch_steps += 1
             if train_steps % args.log_every == 0:
                 # Measure training speed:
-                torch.cuda.synchronize()
-                end_time = time()
-                steps_per_sec = log_steps / (end_time - start_time)
-                datas_per_sec = log_steps*args.batch_size / (end_time - start_time)
-                # Reduce loss history over all processes:
-                avg_loss = torch.tensor(running_loss / log_steps, device=device)
-                avg_loss = avg_loss.item() / accelerator.num_processes
-                log_info(f"(step={train_steps:07d}) " +
-                         f"Train Loss: {avg_loss:.4f}, " +
-                         f"Last Loss: {last_loss:.4f}, " +
-                         f"Train Steps/Sec: {steps_per_sec:.2f}, " +
-                         f"Process data/Sec: {datas_per_sec:.2f}",
-                         in_main_process=accelerator.is_main_process)
+                log_step_metrics(prefix='Batch', current_step=train_steps, steps=log_steps, start_time=start_time,
+                                 loss=running_loss, num_processes=accelerator.num_processes, device=device,
+                                 sync_cuda=False, in_main_process=accelerator.is_main_process)
                 # Reset monitoring variables:
                 running_loss = 0
                 log_steps = 0
                 start_time = time()
 
-            # Save DiT checkpoint:
-            if train_steps % args.ckpt_every == 0 and train_steps > 0:
-                if accelerator.is_main_process:
-                    checkpoint = {
-                        "epoch": epoch,
-                        "ema": ema.state_dict(),
-                    }
-                    if not args.only_ema:
-                        checkpoint = {
-                            "epoch": epoch,
-                            "model": model.state_dict(),
-                            "ema": ema.state_dict(),
-                            "opt": opt.state_dict(),
-                            "args": args
-                        }
-                    checkpoint_path = f"{checkpoint_dir}/{train_steps:07d}.pt"
-                    torch.save(checkpoint, checkpoint_path)
-                    log_info(f"Saved checkpoint to {checkpoint_path}", True)
-
-    # final save
-    if accelerator.is_main_process:
-        if train_steps % args.ckpt_every != 0 and train_steps > 0:
-            checkpoint = {
-                "ema": ema.state_dict(),
-            }
-            if not args.only_ema:
+        # Save DiT checkpoint:
+        if epoch % args.ckpt_every_epoch == 0 and epoch > 0:
+            if accelerator.is_main_process:
                 checkpoint = {
+                    "epoch": epoch,
                     "model": model.state_dict(),
                     "ema": ema.state_dict(),
                     "opt": opt.state_dict(),
                     "args": args
                 }
-            checkpoint_path = f"{checkpoint_dir}/{train_steps:07d}.pt"
-            torch.save(checkpoint, checkpoint_path)
-            log_info(f"Saved checkpoint to {checkpoint_path}", True)
+                save_and_clean_checkpoint(epoch, checkpoint, 'full',
+                                          args.auto_clean_ckpt, in_main_process=True)
+
+        # Save DiT ema checkpoint:
+        if epoch % args.ckpt_ema_every_epoch == 0 and epoch > 0:
+            if accelerator.is_main_process:
+                checkpoint = {
+                    "epoch": epoch,
+                    "ema": ema.state_dict(),
+                    "args": args
+                }
+                save_and_clean_checkpoint(epoch, checkpoint, 'ema',
+                                          args.auto_clean_ckpt, in_main_process=True)
+        # Measure training speed of epoch:
+        log_step_metrics(prefix='Epoch', current_step=train_steps, steps=epoch_steps, start_time=epoch_start_time,
+                         loss=epoch_loss, num_processes=accelerator.num_processes, device=device,
+                         sync_cuda=True, in_main_process=accelerator.is_main_process)
+        # Reset monitoring variables:
+        epoch_loss = 0
+        epoch_steps = 0
+        epoch_start_time = time()
+
+    # final save
+    if accelerator.is_main_process:
+        checkpoint = {
+            "epoch": args.epochs,
+            "model": model.state_dict(),
+            "ema": ema.state_dict(),
+            "opt": opt.state_dict(),
+            "args": args
+        }
+        save_and_clean_checkpoint(args.epochs, checkpoint, 'full_final',
+                                  args.auto_clean_ckpt, in_main_process=True)
     model.eval()  # important! This disables randomized embedding dropout
 
     log_info("Done!", in_main_process=accelerator.is_main_process)
@@ -251,7 +311,7 @@ if __name__ == "__main__":
 
     # Train options
     parser.add_argument("--model-type", type=str, default="DiT-XL/2")
-    parser.add_argument("--epochs", type=int, default=500)
+    parser.add_argument("--epochs", type=int, default=1000)
     parser.add_argument("--lr", type=float, default=3e-4)
     parser.add_argument("--decay", type=float, default=1e-1)
     parser.add_argument("--batch-size", type=int, default=256, help="batch size should >= 6*2")
@@ -259,8 +319,9 @@ if __name__ == "__main__":
     parser.add_argument("--image-size", type=int, choices=[256, 512], default=256)
     parser.add_argument("--in-channels", type=int, default=4)
     parser.add_argument("--num-workers", type=int, default=4)
-    parser.add_argument("--ckpt-every", type=int, default=10_000)
-    parser.add_argument("--only-ema", action='store_true')
+    parser.add_argument("--ckpt-every-epoch", type=int, default=200)
+    parser.add_argument("--ckpt-ema-every-epoch", type=int, default=25, help="save ema and generate a sample")
+    parser.add_argument("--auto-clean-ckpt", action='store_true', help="auto clean all old checkpoint with same suffix")
     parser.add_argument("--log-every", type=int, default=100)
 
     # Dataset abstract

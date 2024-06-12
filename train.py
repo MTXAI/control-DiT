@@ -67,8 +67,8 @@ def save_and_clean_checkpoint(epoch, checkpoint, suffix, auto_clean_ckpt, in_mai
             log_info('No checkpoint to remove')
             return
         for file in remove_ckpt_names:
-            # 获取文件路径
             checkpoint_path = os.path.join(checkpoint_dir, file)
+            os.remove(checkpoint_path)
             log_info(f"Removed checkpoint in {checkpoint_path}")
 
 

@@ -7,9 +7,9 @@ from time import time
 from torch.utils.data import DataLoader
 
 from src.diffusion import create_diffusion
-from src.models import create_dit_model
 from src.utils.dataset import CustomDataset
 from src.utils.log import init_logger
+from src.models import *
 from src.utils.model import *
 
 logger = logging.Logger('')
@@ -64,12 +64,12 @@ def save_and_clean_checkpoint(epoch, checkpoint, suffix, auto_clean_ckpt, in_mai
             if epoch > int(old_epoch):
                 remove_ckpt_names.append(file)
         if len(remove_ckpt_names) == 0:
-            print('No checkpoint to remove')
+            log_info('No checkpoint to remove')
             return
         for file in remove_ckpt_names:
             # 获取文件路径
             checkpoint_path = os.path.join(checkpoint_dir, file)
-            print(f"Removed checkpoint in {checkpoint_path}")
+            log_info(f"Removed checkpoint in {checkpoint_path}")
 
 
 def prepare_output_dir(output, model_type):

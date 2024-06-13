@@ -271,14 +271,11 @@ class ControlDiT(nn.Module):
         Forward pass of ControlDiT, but also batches the unconditional forward pass for classifier-free guidance.
         """
         # https://github.com/openai/glide-text2im/blob/main/notebooks/text2im.ipynb
-        half = x[: len(x) // 2]
-        combined = torch.cat([half, half], dim=0)
-        x1 = combined[0] + z[0]
-        x1 = x1.unsqueeze(0)
-        x2 = combined[1] + z[0]
-        x2 = x2.unsqueeze(0)
-        x = torch.cat([x1, x2], dim=0)
-        model_out = self.forward(x, t, y, z)
+        half_x = x[: len(x) // 2]
+        half_z = z[: len(z) // 2]
+        combined_x = torch.cat([half_x, half_x], dim=0)
+        combined_z = torch.cat([half_z, half_z], dim=0)
+        model_out = self.forward(combined_x, t, y, combined_z)
         # For exact reproducibility reasons, we apply classifier-free guidance on only
         # three channels by default. The standard approach to cfg applies it to all channels.
         # This can be done by uncommenting the following line and commenting-out the line following that.

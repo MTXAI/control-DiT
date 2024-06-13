@@ -42,7 +42,7 @@ def main(args):
     vae = AutoencoderKL.from_pretrained(args.vae_model).to(device)
 
     # Labels to condition the model with (feel free to change):
-    class_label = 0
+    class_label = args.class_label
 
     # Create sampling noise:
     x = torch.randn(1, 4, latent_size, latent_size, device=device)
@@ -86,6 +86,7 @@ if __name__ == "__main__":
     parser.add_argument("--deep-model-source", type=str, default="github")
     parser.add_argument("--vae-model", type=str, default="stabilityai/sd-vae-ft-mse")
     parser.add_argument("--test-image", type=str, default=None)
+    parser.add_argument("--class-label", type=int, default=0)
     parser.add_argument("--output", type=str, default=None)
     args = parser.parse_args()
     main(args)

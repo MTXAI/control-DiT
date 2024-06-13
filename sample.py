@@ -46,12 +46,12 @@ def main(args):
         in_channels=args.in_channels
     ).to(device)
 
-    # if args.model_ckpt != '':
-    #     model_dict = load_model(args.model_ckpt)
-    #     model.load_state_dict(model_dict['ema'])
-    # elif args.dit_model_ckpt != '':
-    #     state_dict = load_pretrained_dit_model(args.dit_model_ckpt)
-    #     model.load_state_dict(state_dict, strict=False)
+    if args.model_ckpt != '':
+        model_dict = load_model(args.model_ckpt)
+        model.load_state_dict(model_dict['ema'])
+    elif args.dit_model_ckpt != '':
+        state_dict = load_pretrained_dit_model(args.dit_model_ckpt)
+        model.load_state_dict(state_dict, strict=False)
 
     vae = AutoencoderKL.from_pretrained(args.vae_model).to(device)
 

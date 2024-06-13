@@ -1,3 +1,4 @@
+import collections
 import os
 from collections import OrderedDict
 
@@ -40,6 +41,11 @@ def load_model(model_ckpt=none_model):
         return None
     assert os.path.isfile(model_ckpt), f'Could not find Model checkpoint at {model_ckpt}'
     checkpoint = torch.load(model_ckpt, map_location=lambda storage, loc: storage)
+    new_model_state = collections.OrderedDict()
+    for k, v in checkpoint['model'].items():
+        name = k[7:]  # remove "module."
+        new_model_state[name] = v
+    checkpoint['model'] = new_model_state
     return checkpoint
 
 

@@ -3,8 +3,10 @@ import logging
 from copy import deepcopy
 from glob import glob
 from time import time
+from pathlib import Path
 
 from torch.utils.data import DataLoader
+import matplotlib.pyplot as plt
 
 from src.diffusion import create_diffusion
 from src.utils.dataset import CustomDataset
@@ -15,6 +17,8 @@ from src.utils.model import *
 logger = logging.Logger('')
 experiment_dir = ''
 checkpoint_dir = ''
+
+Path("./output").mkdir(parents=True, exist_ok=True)
 
 
 def log_info(s, in_main_process=False):
@@ -44,6 +48,34 @@ def log_step_metrics(prefix,
              f"Train Steps/Sec: {steps_per_sec:.2f}, " +
              f"Process data/Sec: {datas_per_sec:.2f}",
              in_main_process=in_main_process)
+
+    return float(f'{avg_loss:.4f}')
+
+
+def save_loss_plot(epoch, losses, in_main_process=False):
+    if not in_main_process:
+        return
+    x = range(len(losses))
+    y = losses
+    plt.plot(x, y, label='train loss', linewidth=2, color='r', marker='o', markerfacecolor='r', markersize=5)
+    plt.xlabel('Epoch')
+    plt.ylabel('Loss Value')
+    path = os.path.join('./output', f'loss-{epoch}-{int(time())}.jpg')
+    plt.savefig(path)
+    log_info(f"[Plot](epoch={epoch}) save loss plot in {path}", in_main_process=in_main_process)
+
+    plot_files = os.listdir('./output')
+    for file in plot_files:
+        items = file.split('-')
+        if len(items) != 3:
+            continue
+        if items[0] != 'loss':
+            continue
+        old_epoch = items[1]
+        if epoch > int(old_epoch):
+            path = os.path.join('./output', file)
+            os.remove(path)
+            log_info(f"Removed loss plot in {path}")
 
 
 def save_and_clean_checkpoint(epoch, checkpoint, suffix, auto_clean_ckpt, in_main_process=False):
@@ -153,7 +185,7 @@ def main(args):
     # Create dit model
     assert args.image_size % args.vae_scale_factor == 0, "Image size must be divisible by 8 (for the VAE encoder)."
     latent_size = args.image_size // args.vae_scale_factor
-    model = create_dit_model(args.model_type)(
+    model = create_control_dit_model_baseline_v2(args.model_type)(
         input_size=latent_size,
         num_classes=args.num_classes,
         in_channels=args.in_channels,
@@ -171,9 +203,9 @@ def main(args):
         log_info(f"Loading dit model from {args.dit_model_ckpt}", True)
         state_dict = load_pretrained_dit_model(args.dit_model_ckpt)
         # pop unmatched params
-        state_dict.pop('x_embedder.proj.weight')
-        state_dict.pop('final_layer.linear.weight')
-        state_dict.pop('final_layer.linear.bias')
+        # state_dict.pop('x_embedder.proj.weight')
+        # state_dict.pop('final_layer.linear.weight')
+        # state_dict.pop('final_layer.linear.bias')
         model.load_state_dict(state_dict, strict=False)
 
     # Create diffusion pipeline and optimizer
@@ -204,12 +236,15 @@ def main(args):
     epoch_loss = 0
     epoch_start_time = time()
 
+    epoch_losses_10 = []
+    epoch_losses = []
+
     first_epoch = 0
     if model_ckpt != '':
         first_epoch = model_dict['epoch'] + 1
     log_info(f"Training for {args.epochs} epochs, First epoch is {first_epoch}...",
              in_main_process=accelerator.is_main_process)
-    for epoch in range(first_epoch, args.epochs):
+    for epoch in range(first_epoch, first_epoch + args.epochs):
         log_info(f"Beginning epoch {epoch}...", in_main_process=accelerator.is_main_process)
 
         for x, y, z in loader:
@@ -221,10 +256,9 @@ def main(args):
             y = y.squeeze(dim=1).long()
             y = y.squeeze(dim=1)
             z = z.squeeze(dim=1)
-            # cat x and z, [4, 32, 32] -> [5, 32, 32]
-            x = torch.cat([x, z], dim=1)
+
             t = torch.randint(0, diffusion.num_timesteps, (x.shape[0],), device=device)
-            model_kwargs = dict(y=y)
+            model_kwargs = dict(y=y, z=z)
             loss_dict = diffusion.training_losses(model, x, t, model_kwargs)
             loss = loss_dict["loss"].mean()
             opt.zero_grad()
@@ -275,9 +309,16 @@ def main(args):
                 save_and_clean_checkpoint(epoch, checkpoint, 'ema',
                                           args.auto_clean_ckpt, in_main_process=True)
         # Measure training speed of epoch:
-        log_step_metrics(prefix='Epoch', current_step=train_steps, steps=epoch_steps, start_time=epoch_start_time,
+        avg_loss = log_step_metrics(prefix='Epoch', current_step=train_steps, steps=epoch_steps, start_time=epoch_start_time,
                          loss=epoch_loss, num_processes=accelerator.num_processes, device=device,
                          sync_cuda=True, in_main_process=accelerator.is_main_process)
+        if epoch >= 10:
+            epoch_losses.append(avg_loss)
+            save_loss_plot(epoch, epoch_losses, in_main_process=accelerator.is_main_process)
+        else:
+            epoch_losses_10.append(avg_loss)
+            save_loss_plot(epoch, epoch_losses_10, in_main_process=accelerator.is_main_process)
+
         # Reset monitoring variables:
         epoch_loss = 0
         epoch_steps = 0

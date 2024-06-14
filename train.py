@@ -18,7 +18,6 @@ logger = logging.Logger('')
 experiment_dir = ''
 checkpoint_dir = ''
 
-Path("./output").mkdir(parents=True, exist_ok=True)
 
 
 def log_info(s, in_main_process=False):
@@ -52,7 +51,7 @@ def log_step_metrics(prefix,
     return float(f'{avg_loss:.4f}')
 
 
-def save_loss_plot(epoch, losses, in_main_process=False):
+def save_loss_plot(output, epoch, losses, in_main_process=False):
     if not in_main_process:
         return
     x = range(len(losses))
@@ -60,11 +59,11 @@ def save_loss_plot(epoch, losses, in_main_process=False):
     plt.plot(x, y, label='train loss', linewidth=2, color='r', marker='o', markerfacecolor='r', markersize=5)
     plt.xlabel('Epoch')
     plt.ylabel('Loss Value')
-    path = os.path.join('./output', f'loss-{epoch}-{int(time())}.jpg')
+    path = os.path.join(output, f'loss-{epoch}-{int(time())}.jpg')
     plt.savefig(path)
     log_info(f"[Plot](epoch={epoch}) save loss plot in {path}", in_main_process=in_main_process)
 
-    plot_files = os.listdir('./output')
+    plot_files = os.listdir(output)
     for file in plot_files:
         items = file.split('-')
         if len(items) != 3:
@@ -73,7 +72,7 @@ def save_loss_plot(epoch, losses, in_main_process=False):
             continue
         old_epoch = items[1]
         if epoch > int(old_epoch):
-            path = os.path.join('./output', file)
+            path = os.path.join(output, file)
             os.remove(path)
             log_info(f"Removed loss plot in {path}")
 
@@ -301,12 +300,12 @@ def main(args):
         # Save DiT ema checkpoint:
         if epoch % args.ckpt_ema_every_epoch == 0 and epoch > 0:
             if accelerator.is_main_process:
-                checkpoint = {
+                checkpoint_ema = {
                     "epoch": epoch,
                     "ema": ema.state_dict(),
                     "args": args
                 }
-                save_and_clean_checkpoint(epoch, checkpoint, 'ema',
+                save_and_clean_checkpoint(epoch, checkpoint_ema, 'ema',
                                           args.auto_clean_ckpt, in_main_process=True)
         # Measure training speed of epoch:
         avg_loss = log_step_metrics(prefix='Epoch', current_step=train_steps, steps=epoch_steps, start_time=epoch_start_time,
@@ -314,10 +313,13 @@ def main(args):
                          sync_cuda=True, in_main_process=accelerator.is_main_process)
         if epoch >= 10:
             epoch_losses.append(avg_loss)
-            save_loss_plot(epoch, epoch_losses, in_main_process=accelerator.is_main_process)
+            save_loss_plot(args.output, epoch, epoch_losses, in_main_process=accelerator.is_main_process)
         else:
             epoch_losses_10.append(avg_loss)
-            save_loss_plot(epoch, epoch_losses_10, in_main_process=accelerator.is_main_process)
+            save_loss_plot(args.output, epoch, epoch_losses_10, in_main_process=accelerator.is_main_process)
+
+
+        # todo 根据 loss 自动停止训练，并且保存最终 checkpoint+ema
 
         # Reset monitoring variables:
         epoch_loss = 0
@@ -326,6 +328,14 @@ def main(args):
 
     # final save
     if accelerator.is_main_process:
+        checkpoint_ema = {
+            "epoch": args.epochs,
+            "ema": ema.state_dict(),
+            "args": args
+        }
+        save_and_clean_checkpoint(args.epochs, checkpoint_ema, 'ema_final',
+                                  args.auto_clean_ckpt, in_main_process=True)
+
         checkpoint = {
             "epoch": args.epochs,
             "model": model.state_dict(),

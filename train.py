@@ -403,10 +403,8 @@ def main(args):
             epoch_losses_10.append(avg_loss)
             save_loss_plot(args.output, epoch, epoch_losses_10, in_main_process=accelerator.is_main_process)
 
-        with torch.no_grad():
-            model.eval()
-            epoch_sample(epoch, model, args)
-        model.train()
+
+        epoch_sample(epoch, ema, args)
         # todo 根据 loss 自动停止训练，并且保存最终 checkpoint+ema
 
         # Reset monitoring variables:
@@ -473,7 +471,6 @@ if __name__ == "__main__":
     parser.add_argument("--vae-model", type=str, default="stabilityai/sd-vae-ft-mse")
     parser.add_argument("--image-config", type=str, default=None)
     parser.add_argument("--num-sampling-steps", type=int, default=1000)
-
 
     args = parser.parse_args()
 

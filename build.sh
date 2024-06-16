@@ -9,7 +9,6 @@ mkdir -p $release
 cp ./Makefile $release
 cp ./*.py $release
 cp ./*.sh $release
-cp ./*.json $release
 cp -r ./hack/requirements.txt $release
 cp -r ./hack/environment.yml $release
 

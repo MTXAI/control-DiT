@@ -324,7 +324,6 @@ def main(args):
     epoch_loss = 0
     epoch_start_time = time()
 
-    epoch_losses_10 = []
     epoch_losses = []
 
     first_epoch = 1
@@ -402,12 +401,8 @@ def main(args):
                                     start_time=epoch_start_time,
                                     loss=epoch_loss, num_processes=accelerator.num_processes, device=device,
                                     sync_cuda=True, in_main_process=accelerator.is_main_process)
-        if epoch >= 10:
-            epoch_losses.append(avg_loss)
-            save_loss_plot(epoch, epoch_losses, in_main_process=accelerator.is_main_process)
-        else:
-            epoch_losses_10.append(avg_loss)
-            save_loss_plot(epoch, epoch_losses_10, in_main_process=accelerator.is_main_process)
+        epoch_losses.append(avg_loss)
+        save_loss_plot(epoch, epoch_losses, in_main_process=accelerator.is_main_process)
 
         if args.gen_sample and epoch % args.sample_every_epoch == 0:
             save_epoch_sample(epoch, ema, device, args, in_main_process=accelerator.is_main_process)

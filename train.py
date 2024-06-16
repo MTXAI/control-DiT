@@ -191,6 +191,7 @@ def get_img_depths(img_list: [str], midas, transform, latent_size, device) -> [T
         iz = cv2_to_depth(ix, midas, transform, device)
         iz = iz.unsqueeze(0).to(device)
         iz = depth_to_map(iz, latent_size, 1, False)
+        iz = iz.repeat(1, 4, 1, 1)
         z[i] = iz
     return z
 
@@ -337,6 +338,7 @@ def main(args):
             y = y.squeeze(dim=1).long()
             y = y.squeeze(dim=1)
             z = z.squeeze(dim=1)
+            z = z.repeat(1, 4, 1, 1)
 
             t = torch.randint(0, diffusion.num_timesteps, (x.shape[0],), device=device)
             model_kwargs = dict(y=y, z=z)

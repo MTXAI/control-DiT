@@ -1,14 +1,8 @@
-import cv2
+import torch
 
-from src.utils.img_tools import *
-from src.utils.model import load_depth_model
+z = torch.rand(32, 1, 32, 32)
+print(z.shape)
 
-midas, transform = load_depth_model(model_type="DPT_Large", device='cpu')
-
-x = cv2.imread("hack/chores/5-train-baseline-2-opt/sample-64-4090-4-epoch900_result.png")
-
-z = cv2_to_depth(x, midas, transform, 'cpu')
-z = z.detach().cpu().numpy()
-cv2.imwrite('sample-64-4090-4-epoch900_result-depth.png', z)
-
-
+z = z.repeat(1, 4, 1, 1)
+print(z.shape)
+print((z[0][2]==z[0][3]))

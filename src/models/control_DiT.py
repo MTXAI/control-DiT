@@ -89,22 +89,6 @@ class ControlDiT(nn.Module):
         self.control_dit_blocks = nn.ModuleList([
             ControlDiTBlock(idx, base_dit_model.blocks[idx], hidden_size) for idx in range(copied_blocks_num)
         ])
-        self.initialize_weights()
-
-    def initialize_weights(self):
-        # Initialize transformer layers:
-        def _basic_init(module):
-            if isinstance(module, nn.Linear):
-                torch.nn.init.xavier_uniform_(module.weight)
-                if module.bias is not None:
-                    nn.init.constant_(module.bias, 0)
-
-        self.apply(_basic_init)
-
-        # Zero-out adaLN modulation layers in ControlDiT blocks:
-        for block in self.control_dit_blocks:
-            nn.init.constant_(block.adaLN_modulation[-1].weight, 0)
-            nn.init.constant_(block.adaLN_modulation[-1].bias, 0)
 
     def __getattr__(self, name: str) -> Tensor or Module:
         # for override
@@ -139,7 +123,7 @@ class ControlDiT(nn.Module):
         # control
         if z is not None:
             for idx in range(1, self.copied_blocks_num+1):
-                z, z_skipped = auto_grad_checkpoint(self.control_dit_blocks.blocks[idx-1], x, c, z, None)
+                z, z_skipped = auto_grad_checkpoint(self.control_dit_blocks[idx-1], x, c, z)
                 x = auto_grad_checkpoint(self.base_dit_model.blocks[idx], x+z_skipped, c)
             forwarded_blocks_num += self.copied_blocks_num
 

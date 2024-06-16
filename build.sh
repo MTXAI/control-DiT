@@ -13,7 +13,7 @@ cp ./*.json $release
 cp -r ./annotations $release
 cp -r ./datasets/example $release
 cp -r ./experiments $release
-cp -r ./hack $release
+#cp -r ./hack $release
 cp -r ./src $release
 cp -r ./tests $release
 cp -r ./train_options $release

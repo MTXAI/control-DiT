@@ -1,0 +1,22 @@
+{
+  "class_labels": [
+    0,
+    0,
+    0,
+    0,
+    482,
+    482,
+    482,
+    482
+  ],
+  "origin_images": [
+    "./datasets/example/n01440764/sample1.jpeg",
+    "./datasets/example/n01440764/sample2.jpeg",
+    "./datasets/example/n01440764/sample3.jpeg",
+    "./datasets/example/n01440764/sample4.jpeg",
+    "./datasets/example/n01440764/sample5.jpeg",
+    "./datasets/example/n01440764/sample6.jpeg",
+    "./datasets/example/n01440764/sample7.jpeg",
+    "./datasets/example/n01440764/sample8.jpeg"
+  ]
+}

@@ -6,7 +6,9 @@ from glob import glob
 from time import time
 from pathlib import Path
 
+import cv2
 from diffusers import AutoencoderKL
+from torch import Tensor
 from torch.utils.data import DataLoader
 import matplotlib.pyplot as plt
 from torchvision.utils import save_image
@@ -16,6 +18,7 @@ from src.utils.dataset import CustomDataset
 from src.utils.log import init_logger
 from src.models import *
 from src.utils.model import *
+from src.utils.img_tools import *
 
 logger = logging.Logger('')
 experiment_dir = ''
@@ -177,7 +180,24 @@ def prepare_all(args) -> (Accelerator, DataLoader, str):
     return accelerator, device, loader
 
 
-def epoch_sample(epoch, model, args):
+def get_img_depths(img_list: [str], midas, transform, latent_size, device) -> [Tensor]:
+    z = torch.randn(len(img_list), 4, latent_size, latent_size, device=device)
+    for i in range(len(img_list)):
+        img_path = img_list[i]
+        if img_path == '':
+            continue
+        ix = cv2_to_pil(cv2.imread(img_path))
+        ix = pil_to_cv2(center_crop_arr(ix, args.image_size))
+        iz = cv2_to_depth(ix, midas, transform, device)
+        iz = iz.unsqueeze(0).to(device)
+        iz = depth_to_map(iz, latent_size, 1, False)
+        z[i] = iz
+    return z
+
+
+def epoch_sample(epoch, model, args, in_main_process=False):
+    if not in_main_process:
+        return
     # Setup PyTorch:
     torch.manual_seed(args.seed)
     torch.set_grad_enabled(False)
@@ -197,7 +217,7 @@ def epoch_sample(epoch, model, args):
     y = torch.tensor(class_labels, device=device)
 
     assert len(image_config["origin_images"]) == n, f"length not match: class_labels vs origin_images"
-    z = get_img_depths(image_config["origin_images"], midas, transform, latent_size, device)
+    z = get_img_depths(image_config["origin_images"], midas, midas_transformer, latent_size, device)
 
     # Setup classifier-free guidance:
     x = torch.cat([x, x], dim=0)
@@ -217,6 +237,7 @@ def epoch_sample(epoch, model, args):
     # Save and display images:
     sample_path = os.path.join(args.output, f'sample-{epoch}.jpg')
     save_image(samples, sample_path, nrow=4, normalize=True, value_range=(-1, 1))
+    log_info(f"Sample path: {sample_path}", True)
 
 
 def init_global_vars(device, args):
@@ -424,10 +445,6 @@ if __name__ == "__main__":
     parser.add_argument("--output", type=str, default="/gemini/output/control-dit_train_baseline-v4", help="output")
     parser.add_argument("--dit-model-ckpt", type=str, default="/gemini/pretrain/checkpoints/DiT-XL-2-256x256.pt")
     parser.add_argument("--model-ckpt", type=str, default="")
-    parser.add_argument("--deep-model", type=str, default="intel-isl/MiDaS")
-    parser.add_argument("--deep-model-source", type=str, default="github")
-    parser.add_argument("--vae-model", type=str, default="stabilityai/sd-vae-ft-mse")
-    parser.add_argument("--image-config", type=str, default=None)
 
     # Train options
     parser.add_argument("--model-type", type=str, default="DiT-XL/2")
@@ -447,6 +464,14 @@ if __name__ == "__main__":
 
     # Dataset abstract
     parser.add_argument("--num-classes", type=int, default=1000)
+
+    # Sample
+    parser.add_argument("--deep-model", type=str, default="intel-isl/MiDaS")
+    parser.add_argument("--deep-model-source", type=str, default="github")
+    parser.add_argument("--vae-model", type=str, default="stabilityai/sd-vae-ft-mse")
+    parser.add_argument("--image-config", type=str, default=None)
+    parser.add_argument("--num-sampling-steps", type=int, default=1000)
+
 
     args = parser.parse_args()
 

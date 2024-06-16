@@ -35,11 +35,10 @@ class ControlDiTBlock(nn.Module):
     A ControlDiT block with adaptive layer norm zero (adaLN-Zero) conditioning.
     """
 
-    def __init__(self, block_index, base_dit_block: DiTBlock):
+    def __init__(self, block_index, base_dit_block: DiTBlock, hidden_size):
         super().__init__()
         self.block_index = block_index
         self.copied_block = deepcopy(base_dit_block)
-        self.hidden_size = hidden_size = base_dit_block.hidden_size
 
         requires_grad(self.copied_block, True)
         self.copied_block.load_state_dict(base_dit_block.state_dict())
@@ -75,6 +74,7 @@ class ControlDiT(nn.Module):
             self,
             base_dit_model: DiT,
             copied_blocks_num=14,
+            hidden_size=1152,
             depth=28,
     ):
         super().__init__()
@@ -87,7 +87,7 @@ class ControlDiT(nn.Module):
         requires_grad(self.base_dit_model, False)
 
         self.control_dit_blocks = nn.ModuleList([
-            ControlDiTBlock(idx, base_dit_model.blocks[idx]) for idx in range(copied_blocks_num)
+            ControlDiTBlock(idx, base_dit_model.blocks[idx], hidden_size) for idx in range(copied_blocks_num)
         ])
         self.initialize_weights()
 
@@ -102,7 +102,7 @@ class ControlDiT(nn.Module):
         self.apply(_basic_init)
 
         # Zero-out adaLN modulation layers in ControlDiT blocks:
-        for block in self.copied_blocks:
+        for block in self.control_dit_blocks:
             nn.init.constant_(block.adaLN_modulation[-1].weight, 0)
             nn.init.constant_(block.adaLN_modulation[-1].bias, 0)
 
@@ -176,51 +176,51 @@ class ControlDiT(nn.Module):
 #################################################################################
 
 def ControlDiT_XL_2(**kwargs):
-    return ControlDiT(depth=28, **kwargs)
+    return ControlDiT(depth=28, hidden_size=1152, **kwargs)
 
 
 def ControlDiT_XL_4(**kwargs):
-    return ControlDiT(depth=28, **kwargs)
+    return ControlDiT(depth=28, hidden_size=1152, **kwargs)
 
 
 def ControlDiT_XL_8(**kwargs):
-    return ControlDiT(depth=28, **kwargs)
+    return ControlDiT(depth=28, hidden_size=1152, **kwargs)
 
 
 def ControlDiT_L_2(**kwargs):
-    return ControlDiT(depth=24, **kwargs)
+    return ControlDiT(depth=24, hidden_size=1024, **kwargs)
 
 
 def ControlDiT_L_4(**kwargs):
-    return ControlDiT(depth=24, **kwargs)
+    return ControlDiT(depth=24, hidden_size=1024, **kwargs)
 
 
 def ControlDiT_L_8(**kwargs):
-    return ControlDiT(depth=24, **kwargs)
+    return ControlDiT(depth=24, hidden_size=1024, **kwargs)
 
 
 def ControlDiT_B_2(**kwargs):
-    return ControlDiT(depth=12, **kwargs)
+    return ControlDiT(depth=12, hidden_size=768, **kwargs)
 
 
 def ControlDiT_B_4(**kwargs):
-    return ControlDiT(depth=12, **kwargs)
+    return ControlDiT(depth=12, hidden_size=768, **kwargs)
 
 
 def ControlDiT_B_8(**kwargs):
-    return ControlDiT(depth=12, **kwargs)
+    return ControlDiT(depth=12, hidden_size=768, **kwargs)
 
 
 def ControlDiT_S_2(**kwargs):
-    return ControlDiT(depth=12, **kwargs)
+    return ControlDiT(depth=12, hidden_size=384, **kwargs)
 
 
 def ControlDiT_S_4(**kwargs):
-    return ControlDiT(depth=12, **kwargs)
+    return ControlDiT(depth=12,hidden_size=384,  **kwargs)
 
 
 def ControlDiT_S_8(**kwargs):
-    return ControlDiT(depth=12, **kwargs)
+    return ControlDiT(depth=12, hidden_size=384, **kwargs)
 
 
 ControlDiT_models = {

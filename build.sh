@@ -8,8 +8,10 @@ mkdir -p $release
 cp ./Makefile $release
 cp ./*.py $release
 cp ./*.sh $release
+cp ./*.json $release
 
 cp -r ./annotations $release
+cp -r ./datasets/example $release
 cp -r ./experiments $release
 cp -r ./hack $release
 cp -r ./src $release

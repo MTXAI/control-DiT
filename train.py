@@ -24,7 +24,7 @@ logger = logging.Logger('')
 experiment_dir = ''
 checkpoint_dir = ''
 image_config = dict()
-vae, midas, midas_transformer, diffusion = None, None, None, None
+vae, midas, midas_transform, diffusion = None, None, None, None
 
 
 def log_info(s, in_main_process=False):
@@ -58,7 +58,7 @@ def log_step_metrics(prefix,
     return float(f'{avg_loss:.4f}')
 
 
-def save_loss_plot(output, epoch, losses, in_main_process=False):
+def save_loss_plot(epoch, losses, in_main_process=False):
     if not in_main_process:
         return
     x = range(len(losses))
@@ -66,11 +66,11 @@ def save_loss_plot(output, epoch, losses, in_main_process=False):
     plt.plot(x, y, label='train loss', linewidth=2, color='r', marker='o', markerfacecolor='r', markersize=5)
     plt.xlabel('Epoch')
     plt.ylabel('Loss Value')
-    path = os.path.join(output, f'loss-{epoch}-{int(time())}.jpg')
+    path = os.path.join(experiment_dir, f'loss-{epoch}-{int(time())}.jpg')
     plt.savefig(path)
     log_info(f"[Plot](epoch={epoch}) save loss plot in {path}", in_main_process=in_main_process)
 
-    plot_files = os.listdir(output)
+    plot_files = os.listdir(experiment_dir)
     for file in plot_files:
         items = file.split('-')
         if len(items) != 3:
@@ -79,7 +79,7 @@ def save_loss_plot(output, epoch, losses, in_main_process=False):
             continue
         old_epoch = items[1]
         if epoch > int(old_epoch):
-            path = os.path.join(output, file)
+            path = os.path.join(experiment_dir, file)
             os.remove(path)
             log_info(f"Removed loss plot in {path}")
 
@@ -110,6 +110,59 @@ def save_and_clean_checkpoint(epoch, checkpoint, suffix, auto_clean_ckpt, in_mai
             log_info(f"Removed checkpoint in {checkpoint_path}")
 
 
+def get_img_depths(img_list: [str], midas, transform, latent_size, device) -> [Tensor]:
+    z = torch.randn(len(img_list), 4, latent_size, latent_size, device=device)
+    for i in range(len(img_list)):
+        img_path = img_list[i]
+        if img_path == '':
+            continue
+        ix = cv2_to_pil(cv2.imread(img_path))
+        ix = pil_to_cv2(center_crop_arr(ix, args.image_size))
+        iz = cv2_to_depth(ix, midas, transform, device)
+        iz = iz.unsqueeze(0).to(device)
+        iz = depth_to_map(iz, latent_size, 1, False)
+        iz = iz.repeat(1, 4, 1, 1)
+        z[i] = iz
+    return z
+
+
+@torch.no_grad()
+def save_epoch_sample(epoch, model, device, args, in_main_process=False):
+    if not in_main_process:
+        return
+
+    latent_size = args.image_size // args.vae_scale_factor
+    class_labels = image_config["class_labels"]
+    n = len(class_labels)
+
+    # Create sampling noise:
+    x = torch.randn(n, 4, latent_size, latent_size, device=device)
+    y = torch.tensor(class_labels, device=device)
+
+    assert len(image_config["origin_images"]) == n, f"length not match: class_labels vs origin_images"
+    z = get_img_depths(image_config["origin_images"], midas, midas_transform, latent_size, device)
+
+    # Setup classifier-free guidance:
+    x = torch.cat([x, x], dim=0)
+    z = torch.cat([z, z], dim=0)
+    y_null = torch.tensor([1000] * n, device=device)
+    y = torch.cat([y, y_null], 0)
+    print(x.shape, z.shape, y.shape)
+
+    model_kwargs = dict(y=y, z=z, cfg_scale=args.cfg_scale)
+    # Sample images:
+    samples = diffusion.p_sample_loop(
+        model.forward_with_cfg, x.shape, x, clip_denoised=False, model_kwargs=model_kwargs, progress=True, device=device
+    )
+    samples, _ = samples.chunk(2, dim=0)  # Remove null class samples
+    samples = vae.decode(samples / 0.18215).sample
+
+    # Save and display images:
+    sample_path = os.path.join(experiment_dir, f'sample-{epoch}.jpg')
+    save_image(samples, sample_path, nrow=4, normalize=True, value_range=(-1, 1))
+    log_info(f"[Sample](epoch={epoch}) save sample in {sample_path}", in_main_process=in_main_process)
+
+
 def prepare_output_dir(output, model_type):
     os.makedirs(output, exist_ok=True)  # Make results folder (holds all experiment subfolders)
     experiment_index = len(glob(f"{output}/*"))
@@ -118,6 +171,19 @@ def prepare_output_dir(output, model_type):
     checkpoint_dir = f"{experiment_dir}/checkpoints"  # Stores saved model checkpoints
     os.makedirs(checkpoint_dir, exist_ok=True)
     return experiment_dir, checkpoint_dir
+
+
+def prepare_sample(device, args):
+    global image_config, vae, midas, midas_transform, diffusion
+
+    # init global
+    with open(args.image_config, encoding="utf-8") as f:
+        image_config = json.load(f)
+    vae = AutoencoderKL.from_pretrained(args.vae_model).to(device)
+
+    diffusion = create_diffusion(str(args.num_sampling_steps))
+    midas, midas_transform = load_depth_model(model_type="DPT_Large", model_repo_or_path=args.deep_model,
+                                              source=args.deep_model_source, device=device)
 
 
 def prepare_all(args) -> (Accelerator, DataLoader, str):
@@ -161,6 +227,7 @@ def prepare_all(args) -> (Accelerator, DataLoader, str):
         log_info(f"Train options: " +
                  f"\n\t - device: {device}" +
                  f"\n\t - model_type: {args.model_type}" +
+                 f"\n\t - copied_blocks_num: {args.copied_blocks_num}" +
                  f"\n\t - epochs: {args.epochs}" +
                  f"\n\t - lr: {args.lr}" +
                  f"\n\t - decay: {args.decay}" +
@@ -176,82 +243,20 @@ def prepare_all(args) -> (Accelerator, DataLoader, str):
                  f"\n\t - length: {len(dataset)}" +
                  f"\n\t - image_size: {args.image_size}" +
                  f"\n\t - num_classes: {args.num_classes}", True)
+        log_info(f"Sample options: " +
+                 f"\n\t - gen_sample: {args.gen_sample}" +
+                 f"\n\t - deep_model: {args.deep_model}" +
+                 f"\n\t - deep_model_source: {args.deep_model_source}" +
+                 f"\n\t - vae_model: {args.vae_model}" +
+                 f"\n\t - image_config: {args.image_config}" +
+                 f"\n\t - num_sampling_steps: {args.num_sampling_steps}" +
+                 f"\n\t - cfg_scale: {args.cfg_scale}" +
+                 f"\n\t - sample_every_epoch: {args.sample_every_epoch}", True)
+
+    if accelerator.is_main_process and args.gen_sample:
+        prepare_sample(device, args)
 
     return accelerator, device, loader
-
-
-def get_img_depths(img_list: [str], midas, transform, latent_size, device) -> [Tensor]:
-    z = torch.randn(len(img_list), 4, latent_size, latent_size, device=device)
-    for i in range(len(img_list)):
-        img_path = img_list[i]
-        if img_path == '':
-            continue
-        ix = cv2_to_pil(cv2.imread(img_path))
-        ix = pil_to_cv2(center_crop_arr(ix, args.image_size))
-        iz = cv2_to_depth(ix, midas, transform, device)
-        iz = iz.unsqueeze(0).to(device)
-        iz = depth_to_map(iz, latent_size, 1, False)
-        iz = iz.repeat(1, 4, 1, 1)
-        z[i] = iz
-    return z
-
-
-def epoch_sample(epoch, model, args, in_main_process=False):
-    if not in_main_process:
-        return
-    # Setup PyTorch:
-    torch.manual_seed(args.seed)
-    torch.set_grad_enabled(False)
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-
-    if args.model_ckpt is None:
-        assert args.model == "DiT-XL/2", "Only DiT-XL/2 models are available for auto-download."
-        assert args.image_size in [256, 512]
-        assert args.num_classes == 1000
-
-    latent_size = args.image_size // args.vae_scale_factor
-    class_labels = image_config["class_labels"]
-    n = len(class_labels)
-
-    # Create sampling noise:
-    x = torch.randn(n, 4, latent_size, latent_size, device=device)
-    y = torch.tensor(class_labels, device=device)
-
-    assert len(image_config["origin_images"]) == n, f"length not match: class_labels vs origin_images"
-    z = get_img_depths(image_config["origin_images"], midas, midas_transformer, latent_size, device)
-
-    # Setup classifier-free guidance:
-    x = torch.cat([x, x], dim=0)
-    z = torch.cat([z, z], dim=0)
-    y_null = torch.tensor([1000] * n, device=device)
-    y = torch.cat([y, y_null], 0)
-    print(x.shape, z.shape, y.shape)
-
-    model_kwargs = dict(y=y, z=z, cfg_scale=args.cfg_scale)
-    # Sample images:
-    samples = diffusion.p_sample_loop(
-        model.forward_with_cfg, x.shape, x, clip_denoised=False, model_kwargs=model_kwargs, progress=True, device=device
-    )
-    samples, _ = samples.chunk(2, dim=0)  # Remove null class samples
-    samples = vae.decode(samples / 0.18215).sample
-
-    # Save and display images:
-    sample_path = os.path.join(args.output, f'sample-{epoch}.jpg')
-    save_image(samples, sample_path, nrow=4, normalize=True, value_range=(-1, 1))
-    log_info(f"Sample path: {sample_path}", True)
-
-
-def init_global_vars(device, args):
-    global image_config, vae, midas, midas_transformer, diffusion
-
-    # init global
-    with open(args.image_config, encoding="utf-8") as f:
-        image_config = json.load(f)
-    vae = AutoencoderKL.from_pretrained(args.vae_model).to(device)
-
-    diffusion = create_diffusion(str(args.num_sampling_steps))
-    midas, midas_transform = load_depth_model(model_type="DPT_Large", model_repo_or_path=args.deep_model,
-                                              source=args.deep_model_source, device=device)
 
 
 def main(args):
@@ -261,9 +266,6 @@ def main(args):
     # Setup accelerator, device and dataloader:
     assert cuda, "Training currently requires at least one GPU."
     accelerator, device, loader = prepare_all(args)
-
-    if accelerator.is_main_process:
-        init_global_vars(device, args)
 
     # Create dit model
     assert args.image_size % args.vae_scale_factor == 0, "Image size must be divisible by 8 (for the VAE encoder)."
@@ -307,6 +309,10 @@ def main(args):
     ema.eval()  # EMA model should always be in eval mode
     model, opt, loader = accelerator.prepare(model, opt, loader)
 
+    # gen first sample
+    if args.gen_sample:
+        save_epoch_sample(0, ema, device, args, in_main_process=accelerator.is_main_process)
+
     # Begin training
     train_steps = 0
 
@@ -321,7 +327,7 @@ def main(args):
     epoch_losses_10 = []
     epoch_losses = []
 
-    first_epoch = 0
+    first_epoch = 1
     if model_ckpt != '':
         first_epoch = model_dict['epoch'] + 1
     log_info(f"Training for {args.epochs} epochs, First epoch is {first_epoch}...",
@@ -369,7 +375,7 @@ def main(args):
                 start_time = time()
 
         # Save DiT checkpoint:
-        if epoch % args.ckpt_every_epoch == 0 and epoch > 0:
+        if epoch % args.ckpt_every_epoch == 0:
             if accelerator.is_main_process:
                 checkpoint = {
                     "epoch": epoch,
@@ -382,7 +388,7 @@ def main(args):
                                           args.auto_clean_ckpt, in_main_process=True)
 
         # Save DiT ema checkpoint:
-        if epoch % args.ckpt_ema_every_epoch == 0 and epoch > 0:
+        if epoch % args.ckpt_ema_every_epoch == 0:
             if accelerator.is_main_process:
                 checkpoint_ema = {
                     "epoch": epoch,
@@ -398,13 +404,13 @@ def main(args):
                                     sync_cuda=True, in_main_process=accelerator.is_main_process)
         if epoch >= 10:
             epoch_losses.append(avg_loss)
-            save_loss_plot(args.output, epoch, epoch_losses, in_main_process=accelerator.is_main_process)
+            save_loss_plot(experiment_dir, epoch, epoch_losses, in_main_process=accelerator.is_main_process)
         else:
             epoch_losses_10.append(avg_loss)
-            save_loss_plot(args.output, epoch, epoch_losses_10, in_main_process=accelerator.is_main_process)
+            save_loss_plot(experiment_dir, epoch, epoch_losses_10, in_main_process=accelerator.is_main_process)
 
-
-        epoch_sample(epoch, ema, args)
+        if args.gen_sample and epoch % args.sample_every_epoch == 0:
+            save_epoch_sample(epoch, ema, device, args, in_main_process=accelerator.is_main_process)
         # todo 根据 loss 自动停止训练，并且保存最终 checkpoint+ema
 
         # Reset monitoring variables:
@@ -465,12 +471,15 @@ if __name__ == "__main__":
     # Dataset abstract
     parser.add_argument("--num-classes", type=int, default=1000)
 
-    # Sample
+    # Sample options
+    parser.add_argument("--gen-sample", action='store_true')
     parser.add_argument("--deep-model", type=str, default="intel-isl/MiDaS")
     parser.add_argument("--deep-model-source", type=str, default="github")
     parser.add_argument("--vae-model", type=str, default="stabilityai/sd-vae-ft-mse")
     parser.add_argument("--image-config", type=str, default=None)
     parser.add_argument("--num-sampling-steps", type=int, default=1000)
+    parser.add_argument("--cfg-scale", type=float, default=4.0)
+    parser.add_argument("--sample-every-epoch", type=int, default=25)
 
     args = parser.parse_args()
 

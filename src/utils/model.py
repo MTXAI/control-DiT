@@ -1,6 +1,9 @@
 import collections
 import os
 from collections import OrderedDict
+from typing import Iterable
+
+from torch.utils.checkpoint import checkpoint, checkpoint_sequential
 
 from src.utils import *
 
@@ -69,3 +72,12 @@ def requires_grad(model, flag=True):
     """
     for p in model.parameters():
         p.requires_grad = flag
+
+
+def auto_grad_checkpoint(module, *args, **kwargs):
+    if getattr(module, 'grad_checkpointing', False):
+        if not isinstance(module, Iterable):
+            return checkpoint(module, *args, **kwargs)
+        gc_step = module[0].grad_checkpointing_step
+        return checkpoint_sequential(module, gc_step, *args, **kwargs)
+    return module(*args, **kwargs)

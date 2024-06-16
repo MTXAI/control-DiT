@@ -1,12 +1,15 @@
 import argparse
+import json
 import logging
 from copy import deepcopy
 from glob import glob
 from time import time
 from pathlib import Path
 
+from diffusers import AutoencoderKL
 from torch.utils.data import DataLoader
 import matplotlib.pyplot as plt
+from torchvision.utils import save_image
 
 from src.diffusion import create_diffusion
 from src.utils.dataset import CustomDataset
@@ -17,7 +20,8 @@ from src.utils.model import *
 logger = logging.Logger('')
 experiment_dir = ''
 checkpoint_dir = ''
-
+image_config = dict()
+vae, midas, midas_transformer, diffusion = None, None, None, None
 
 
 def log_info(s, in_main_process=False):
@@ -173,6 +177,61 @@ def prepare_all(args) -> (Accelerator, DataLoader, str):
     return accelerator, device, loader
 
 
+def epoch_sample(epoch, model, args):
+    # Setup PyTorch:
+    torch.manual_seed(args.seed)
+    torch.set_grad_enabled(False)
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+
+    if args.model_ckpt is None:
+        assert args.model == "DiT-XL/2", "Only DiT-XL/2 models are available for auto-download."
+        assert args.image_size in [256, 512]
+        assert args.num_classes == 1000
+
+    latent_size = args.image_size // args.vae_scale_factor
+    class_labels = image_config["class_labels"]
+    n = len(class_labels)
+
+    # Create sampling noise:
+    x = torch.randn(n, 4, latent_size, latent_size, device=device)
+    y = torch.tensor(class_labels, device=device)
+
+    assert len(image_config["origin_images"]) == n, f"length not match: class_labels vs origin_images"
+    z = get_img_depths(image_config["origin_images"], midas, transform, latent_size, device)
+
+    # Setup classifier-free guidance:
+    x = torch.cat([x, x], dim=0)
+    z = torch.cat([z, z], dim=0)
+    y_null = torch.tensor([1000] * n, device=device)
+    y = torch.cat([y, y_null], 0)
+    print(x.shape, z.shape, y.shape)
+
+    model_kwargs = dict(y=y, z=z, cfg_scale=args.cfg_scale)
+    # Sample images:
+    samples = diffusion.p_sample_loop(
+        model.forward_with_cfg, x.shape, x, clip_denoised=False, model_kwargs=model_kwargs, progress=True, device=device
+    )
+    samples, _ = samples.chunk(2, dim=0)  # Remove null class samples
+    samples = vae.decode(samples / 0.18215).sample
+
+    # Save and display images:
+    sample_path = os.path.join(args.output, f'sample-{epoch}.jpg')
+    save_image(samples, sample_path, nrow=4, normalize=True, value_range=(-1, 1))
+
+
+def init_global_vars(device, args):
+    global image_config, vae, midas, midas_transformer, diffusion
+
+    # init global
+    with open(args.image_config, encoding="utf-8") as f:
+        image_config = json.load(f)
+    vae = AutoencoderKL.from_pretrained(args.vae_model).to(device)
+
+    diffusion = create_diffusion(str(args.num_sampling_steps))
+    midas, midas_transform = load_depth_model(model_type="DPT_Large", model_repo_or_path=args.deep_model,
+                                              source=args.deep_model_source, device=device)
+
+
 def main(args):
     """
     Trains a new DiT model.
@@ -181,37 +240,39 @@ def main(args):
     assert cuda, "Training currently requires at least one GPU."
     accelerator, device, loader = prepare_all(args)
 
+    if accelerator.is_main_process:
+        init_global_vars(device, args)
+
     # Create dit model
     assert args.image_size % args.vae_scale_factor == 0, "Image size must be divisible by 8 (for the VAE encoder)."
     latent_size = args.image_size // args.vae_scale_factor
-    model = create_control_dit_model_baseline_v2(args.model_type)(
+    dit_model = DiT_models[args.model_type](
         input_size=latent_size,
         num_classes=args.num_classes,
-        in_channels=args.in_channels,
+    ).to(device)
+    state_dict = load_pretrained_dit_model(args.dit_model_ckpt)
+    dit_model.load_state_dict(state_dict)
+
+    model = create_control_dit_model(args.model_type)(
+        base_dit_model=dit_model,
+        copied_blocks_num=args.copied_blocks_num,
     ).to(device)
     model_ckpt = ''
     if args.model_ckpt != '' and args.model_ckpt != none_model:
         model_ckpt = args.model_ckpt
 
     # Load dit model from checkpoint or pretrained checkpoint
+    model_dict = dict()
     if model_ckpt != '':
         log_info(f"Loading model from {args.model_ckpt}", True)
         model_dict = load_model(model_ckpt)
         model.load_state_dict(model_dict['model'])
-    elif args.dit_model_ckpt != '':
-        log_info(f"Loading dit model from {args.dit_model_ckpt}", True)
-        state_dict = load_pretrained_dit_model(args.dit_model_ckpt)
-        # pop unmatched params
-        # state_dict.pop('x_embedder.proj.weight')
-        # state_dict.pop('final_layer.linear.weight')
-        # state_dict.pop('final_layer.linear.bias')
-        model.load_state_dict(state_dict, strict=False)
 
     # Create diffusion pipeline and optimizer
     ema = deepcopy(model).to(device)  # Create an EMA of the model for use after training
     requires_grad(ema, False)
     diffusion = create_diffusion(timestep_respacing="")  # default: 1000 steps, linear noise schedule
-    log_info(f"DiT Parameters: {sum(p.numel() for p in model.parameters()):,}",
+    log_info(f"ControlDiT Parameters: {sum(p.numel() for p in model.parameters()):,}",
              in_main_process=accelerator.is_main_process)
 
     opt = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=args.decay)
@@ -308,9 +369,10 @@ def main(args):
                 save_and_clean_checkpoint(epoch, checkpoint_ema, 'ema',
                                           args.auto_clean_ckpt, in_main_process=True)
         # Measure training speed of epoch:
-        avg_loss = log_step_metrics(prefix='Epoch', current_step=train_steps, steps=epoch_steps, start_time=epoch_start_time,
-                         loss=epoch_loss, num_processes=accelerator.num_processes, device=device,
-                         sync_cuda=True, in_main_process=accelerator.is_main_process)
+        avg_loss = log_step_metrics(prefix='Epoch', current_step=train_steps, steps=epoch_steps,
+                                    start_time=epoch_start_time,
+                                    loss=epoch_loss, num_processes=accelerator.num_processes, device=device,
+                                    sync_cuda=True, in_main_process=accelerator.is_main_process)
         if epoch >= 10:
             epoch_losses.append(avg_loss)
             save_loss_plot(args.output, epoch, epoch_losses, in_main_process=accelerator.is_main_process)
@@ -318,7 +380,10 @@ def main(args):
             epoch_losses_10.append(avg_loss)
             save_loss_plot(args.output, epoch, epoch_losses_10, in_main_process=accelerator.is_main_process)
 
-
+        with torch.no_grad():
+            model.eval()
+            epoch_sample(epoch, model, args)
+        model.train()
         # todo 根据 loss 自动停止训练，并且保存最终 checkpoint+ema
 
         # Reset monitoring variables:
@@ -359,9 +424,14 @@ if __name__ == "__main__":
     parser.add_argument("--output", type=str, default="/gemini/output/control-dit_train_baseline-v4", help="output")
     parser.add_argument("--dit-model-ckpt", type=str, default="/gemini/pretrain/checkpoints/DiT-XL-2-256x256.pt")
     parser.add_argument("--model-ckpt", type=str, default="")
+    parser.add_argument("--deep-model", type=str, default="intel-isl/MiDaS")
+    parser.add_argument("--deep-model-source", type=str, default="github")
+    parser.add_argument("--vae-model", type=str, default="stabilityai/sd-vae-ft-mse")
+    parser.add_argument("--image-config", type=str, default=None)
 
     # Train options
     parser.add_argument("--model-type", type=str, default="DiT-XL/2")
+    parser.add_argument("--copied-blocks-num", type=int, default=8)
     parser.add_argument("--epochs", type=int, default=1000)
     parser.add_argument("--lr", type=float, default=3e-4)
     parser.add_argument("--decay", type=float, default=1e-1)
@@ -379,4 +449,5 @@ if __name__ == "__main__":
     parser.add_argument("--num-classes", type=int, default=1000)
 
     args = parser.parse_args()
+
     main(args)
